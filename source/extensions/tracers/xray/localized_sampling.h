@@ -155,6 +155,11 @@ public:
    */
   bool usingDefaultManifest() const { return use_default_; }
 
+  /**
+   * @return default manifest
+   */
+  LocalizedSamplingManifest& defaultManifest() { return default_manifest_; }
+
 private:
   bool shouldTrace(LocalizedSamplingRule& rule);
   LocalizedSamplingManifest default_manifest_;
