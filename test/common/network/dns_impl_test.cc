@@ -357,7 +357,9 @@ TEST_F(DnsImplConstructor, SupportsCustomResolvers) {
   auto addr4 = Network::Utility::parseInternetAddressAndPort("127.0.0.1:54");
   char addr6str[INET6_ADDRSTRLEN];
   auto addr6 = Network::Utility::parseInternetAddressAndPort("[::1]:54");
-  auto resolver = dispatcher_->createDnsResolver({addr4, addr6}, false);
+  auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
+  auto resolver =
+      dispatcher_->createDnsResolver({addr4, addr6}, false, area_dns_lookup_option_flags);
   auto peer = std::make_unique<DnsResolverImplPeer>(dynamic_cast<DnsResolverImpl*>(resolver.get()));
   ares_addr_port_node* resolvers;
   int result = ares_get_servers_ports(peer->channel(), &resolvers);
@@ -408,7 +410,9 @@ private:
 TEST_F(DnsImplConstructor, SupportCustomAddressInstances) {
   auto test_instance(std::make_shared<CustomInstance>("127.0.0.1", 45));
   EXPECT_EQ(test_instance->asString(), "127.0.0.1:borked_port_45");
-  auto resolver = dispatcher_->createDnsResolver({test_instance}, false);
+  auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
+  auto resolver =
+      dispatcher_->createDnsResolver({test_instance}, false, area_dns_lookup_option_flags);
   auto peer = std::make_unique<DnsResolverImplPeer>(dynamic_cast<DnsResolverImpl*>(resolver.get()));
   ares_addr_port_node* resolvers;
   int result = ares_get_servers_ports(peer->channel(), &resolvers);
@@ -424,8 +428,10 @@ TEST_F(DnsImplConstructor, BadCustomResolvers) {
   envoy::config::core::v3::Address pipe_address;
   pipe_address.mutable_pipe()->set_path("foo");
   auto pipe_instance = Network::Utility::protobufAddressToAddress(pipe_address);
-  EXPECT_THROW_WITH_MESSAGE(dispatcher_->createDnsResolver({pipe_instance}, false), EnvoyException,
-                            "DNS resolver 'foo' is not an IP address");
+  auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
+  EXPECT_THROW_WITH_MESSAGE(
+      dispatcher_->createDnsResolver({pipe_instance}, false, area_dns_lookup_option_flags),
+      EnvoyException, "DNS resolver 'foo' is not an IP address");
 }
 
 class DnsImplTest : public testing::TestWithParam<Address::IpVersion> {
@@ -442,9 +448,10 @@ public:
 
     if (setResolverInConstructor()) {
       resolver_ = dispatcher_->createDnsResolver({socket_->addressProvider().localAddress()},
-                                                 useTcpForDnsLookups());
+                                                 useTcpForDnsLookups(), AreaDnsLookupOptionFlags());
     } else {
-      resolver_ = dispatcher_->createDnsResolver({}, useTcpForDnsLookups());
+      resolver_ =
+          dispatcher_->createDnsResolver({}, useTcpForDnsLookups(), AreaDnsLookupOptionFlags());
     }
 
     // Point c-ares at the listener with no search domains and TCP-only.
@@ -548,6 +555,9 @@ protected:
   virtual bool zeroTimeout() const { return false; }
   virtual bool tcpOnly() const { return true; }
   virtual bool useTcpForDnsLookups() const { return false; }
+  virtual envoy::config::core::v3::AreaDnsLookupOptionFlags AreaDnsLookupOptionFlags() const {
+    return envoy::config::core::v3::AreaDnsLookupOptionFlags();
+  };
   virtual bool setResolverInConstructor() const { return false; }
   std::unique_ptr<TestDnsServer> server_;
   std::unique_ptr<DnsResolverImplPeer> peer_;
@@ -908,6 +918,12 @@ class DnsImplAresFlagsForTcpTest : public DnsImplTest {
 protected:
   bool tcpOnly() const override { return false; }
   bool useTcpForDnsLookups() const override { return true; }
+  envoy::config::core::v3::AreaDnsLookupOptionFlags AreaDnsLookupOptionFlags() const override {
+    auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
+    area_dns_lookup_option_flags.mutable_use_tcp()->set_value(true);
+    area_dns_lookup_option_flags.mutable_no_defalt_search_domain()->set_value(false);
+    return area_dns_lookup_option_flags;
+  };
 };
 
 // Parameterize the DNS test server socket address.
@@ -956,6 +972,12 @@ TEST_P(DnsImplAresFlagsForUdpTest, UdpLookupsEnabled) {
 class DnsImplCustomResolverTest : public DnsImplTest {
   bool tcpOnly() const override { return false; }
   bool useTcpForDnsLookups() const override { return true; }
+  envoy::config::core::v3::AreaDnsLookupOptionFlags AreaDnsLookupOptionFlags() const override {
+    auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
+    area_dns_lookup_option_flags.mutable_use_tcp()->set_value(true);
+    area_dns_lookup_option_flags.mutable_no_defalt_search_domain()->set_value(false);
+    return area_dns_lookup_option_flags;
+  };
   bool setResolverInConstructor() const override { return true; }
 };
 

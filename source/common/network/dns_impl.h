@@ -26,9 +26,11 @@ class DnsResolverImplPeer;
  */
 class DnsResolverImpl : public DnsResolver, protected Logger::Loggable<Logger::Id::upstream> {
 public:
-  DnsResolverImpl(Event::Dispatcher& dispatcher,
-                  const std::vector<Network::Address::InstanceConstSharedPtr>& resolvers,
-                  const bool use_tcp_for_dns_lookups);
+  DnsResolverImpl(
+      Event::Dispatcher& dispatcher,
+      const std::vector<Network::Address::InstanceConstSharedPtr>& resolvers,
+      const bool use_tcp_for_dns_lookups,
+      const envoy::config::core::v3::AreaDnsLookupOptionFlags& area_dns_lookup_option_flags);
   ~DnsResolverImpl() override;
 
   // Network::DnsResolver
@@ -107,6 +109,9 @@ private:
   ares_channel channel_;
   bool dirty_channel_{};
   const bool use_tcp_for_dns_lookups_;
+  //  const bool no_default_search_domain_for_dns_lookups_;
+  const envoy::config::core::v3::AreaDnsLookupOptionFlags& area_dns_lookup_option_flags_;
+
   absl::node_hash_map<int, Event::FileEventPtr> events_;
   const absl::optional<std::string> resolvers_csv_;
 };

@@ -444,3 +444,10 @@ message ControlPlane {
   // the Envoy is connected to.
   string identifier = 1;
 }
+
+// Configuration of DNS Lookup option flags.
+message AreaDnsLookupOptionFlags {
+  google.protobuf.BoolValue use_tcp = 1;
+
+  google.protobuf.BoolValue no_defalt_search_domain = 2;
+}

@@ -62,10 +62,13 @@ TEST_P(ConfigValidation, CreateScaledTimer) {
 // DNS resolver returns the same shared_ptr.
 TEST_F(ConfigValidation, SharedDnsResolver) {
   std::vector<Network::Address::InstanceConstSharedPtr> resolvers;
+  auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
 
-  Network::DnsResolverSharedPtr dns1 = dispatcher_->createDnsResolver(resolvers, false);
+  Network::DnsResolverSharedPtr dns1 =
+      dispatcher_->createDnsResolver(resolvers, false, area_dns_lookup_option_flags);
   long use_count = dns1.use_count();
-  Network::DnsResolverSharedPtr dns2 = dispatcher_->createDnsResolver(resolvers, false);
+  Network::DnsResolverSharedPtr dns2 =
+      dispatcher_->createDnsResolver(resolvers, false, area_dns_lookup_option_flags);
 
   EXPECT_EQ(dns1.get(), dns2.get());          // Both point to the same instance.
   EXPECT_EQ(use_count + 1, dns2.use_count()); // Each call causes ++ in use_count.

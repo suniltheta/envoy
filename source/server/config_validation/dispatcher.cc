@@ -17,7 +17,8 @@ Network::ClientConnectionPtr ValidationDispatcher::createClientConnection(
 }
 
 Network::DnsResolverSharedPtr ValidationDispatcher::createDnsResolver(
-    const std::vector<Network::Address::InstanceConstSharedPtr>&, const bool) {
+    const std::vector<Network::Address::InstanceConstSharedPtr>&, const bool,
+    const envoy::config::core::v3::AreaDnsLookupOptionFlags&) {
   return dns_resolver_;
 }
 

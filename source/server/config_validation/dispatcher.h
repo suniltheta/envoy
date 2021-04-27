@@ -25,7 +25,9 @@ public:
                          const Network::ConnectionSocket::OptionsSharedPtr& options) override;
   Network::DnsResolverSharedPtr
   createDnsResolver(const std::vector<Network::Address::InstanceConstSharedPtr>& resolvers,
-                    const bool use_tcp_for_dns_lookups) override;
+                    const bool use_tcp_for_dns_lookups,
+                    const envoy::config::core::v3::AreaDnsLookupOptionFlags&
+                        area_dns_lookup_option_flags) override;
   Network::ListenerPtr createListener(Network::SocketSharedPtr&&, Network::TcpListenerCallbacks&,
                                       bool bind_to_port, uint32_t backlog_size) override;
 

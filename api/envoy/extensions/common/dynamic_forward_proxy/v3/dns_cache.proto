@@ -3,10 +3,12 @@ syntax = "proto3";
 package envoy.extensions.common.dynamic_forward_proxy.v3;
 
 import "envoy/config/cluster/v3/cluster.proto";
+import "envoy/config/core/v3/base.proto";
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/wrappers.proto";
 
+import "envoy/annotations/deprecation.proto";
 import "udpa/annotations/status.proto";
 import "udpa/annotations/versioning.proto";
 import "validate/validate.proto";
@@ -27,7 +29,7 @@ message DnsCacheCircuitBreakers {
 
 // Configuration for the dynamic forward proxy DNS cache. See the :ref:`architecture overview
 // <arch_overview_http_dynamic_forward_proxy>` for more information.
-// [#next-free-field: 9]
+// [#next-free-field: 10]
 message DnsCacheConfig {
   option (udpa.annotations.versioning).previous_message_type =
       "envoy.config.common.dynamic_forward_proxy.v2alpha.DnsCacheConfig";
@@ -100,5 +102,14 @@ message DnsCacheConfig {
   // Setting this value causes failure if the
   // ``envoy.restart_features.use_apple_api_for_dns_lookups`` runtime value is true during
   // server startup. Apple' API only uses UDP for DNS resolution.
-  bool use_tcp_for_dns_lookups = 8;
+  bool use_tcp_for_dns_lookups = 8
+      [deprecated = true, (envoy.annotations.deprecated_at_minor_version) = "3.0"];
+
+  // [#next-major-version: Reconcile DNS options in a single message.]
+  // Don't use the default search domains; only query hostnames as-is or as aliases for DNS lookups.
+  //  bool no_default_search_domain_for_dns_lookups = 9;
+
+  //  AreaDnsLookupOptionFlags1 area_dns_lookup_option_flags1 = 10;
+
+  config.core.v3.AreaDnsLookupOptionFlags area_dns_lookup_option_flags = 9;
 }

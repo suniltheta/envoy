@@ -536,7 +536,12 @@ void InstanceImpl::initialize(const Options& options,
   ssl_context_manager_ = createContextManager("ssl_context_manager", time_source_);
 
   const bool use_tcp_for_dns_lookups = bootstrap_.use_tcp_for_dns_lookups();
-  dns_resolver_ = dispatcher_->createDnsResolver({}, use_tcp_for_dns_lookups);
+  //  const bool no_default_search_domain_for_dns_lookups =
+  //  bootstrap_.no_default_search_domain_for_dns_lookups(); const
+  //  envoy::config::core::v3::AreaDnsLookupOptionFlags& area_dns_lookup_option_flags =
+  //  bootstrap_.area_dns_lookup_option_flags();
+  dns_resolver_ = dispatcher_->createDnsResolver({}, use_tcp_for_dns_lookups,
+                                                 bootstrap_.area_dns_lookup_option_flags());
 
   cluster_manager_factory_ = std::make_unique<Upstream::ProdClusterManagerFactory>(
       *admin_, Runtime::LoaderSingleton::get(), stats_store_, thread_local_, dns_resolver_,

@@ -157,7 +157,9 @@ DispatcherImpl::createClientConnection(Network::Address::InstanceConstSharedPtr 
 
 Network::DnsResolverSharedPtr DispatcherImpl::createDnsResolver(
     const std::vector<Network::Address::InstanceConstSharedPtr>& resolvers,
-    const bool use_tcp_for_dns_lookups) {
+    const bool use_tcp_for_dns_lookups,
+    const envoy::config::core::v3::AreaDnsLookupOptionFlags& area_dns_lookup_option_flags) {
+  //    bool no_default_search_domain_for_dns_lookups) {
   ASSERT(isThreadSafe());
 #ifdef __APPLE__
   static bool use_apple_api_for_dns_lookups =
@@ -177,7 +179,8 @@ Network::DnsResolverSharedPtr DispatcherImpl::createDnsResolver(
                                                            api_.rootScope());
   }
 #endif
-  return std::make_shared<Network::DnsResolverImpl>(*this, resolvers, use_tcp_for_dns_lookups);
+  return std::make_shared<Network::DnsResolverImpl>(*this, resolvers, use_tcp_for_dns_lookups,
+                                                    area_dns_lookup_option_flags);
 }
 
 FileEventPtr DispatcherImpl::createFileEvent(os_fd_t fd, FileReadyCb cb, FileTriggerType trigger,
