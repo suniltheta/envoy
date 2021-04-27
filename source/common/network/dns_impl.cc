@@ -71,15 +71,15 @@ DnsResolverImpl::AresOptions DnsResolverImpl::defaultAresOptions() {
   AresOptions options{};
 
   if (area_dns_lookup_option_flags_.has_use_tcp() &&
-      area_dns_lookup_option_flags_.use_tcp().value()){
+      area_dns_lookup_option_flags_.use_tcp().value()) {
     options.optmask_ |= ARES_OPT_FLAGS;
     options.options_.flags |= ARES_FLAG_USEVC;
   }
 
   if (area_dns_lookup_option_flags_.has_no_defalt_search_domain() &&
       area_dns_lookup_option_flags_.no_defalt_search_domain().value()) {
-      options.optmask_ |= ARES_OPT_FLAGS;
-      options.options_.flags |= ARES_FLAG_NOSEARCH;
+    options.optmask_ |= ARES_OPT_FLAGS;
+    options.options_.flags |= ARES_FLAG_NOSEARCH;
   }
 
   return options;
