@@ -886,7 +886,8 @@ TEST_P(DnsImplTest, PendingTimerEnable) {
   Event::MockDispatcher dispatcher;
   Event::MockTimer* timer = new NiceMock<Event::MockTimer>();
   EXPECT_CALL(dispatcher, createTimer_(_)).WillOnce(Return(timer));
-  resolver_ = std::make_shared<DnsResolverImpl>(dispatcher, vec, false);
+  resolver_ = std::make_shared<DnsResolverImpl>(
+      dispatcher, vec, false, envoy::config::core::v3::AreaDnsLookupOptionFlags());
   Event::FileEvent* file_event = new NiceMock<Event::MockFileEvent>();
   EXPECT_CALL(dispatcher, createFileEvent_(_, _, _, _)).WillOnce(Return(file_event));
   EXPECT_CALL(*timer, enableTimer(_, _));
@@ -921,7 +922,7 @@ protected:
   envoy::config::core::v3::AreaDnsLookupOptionFlags AreaDnsLookupOptionFlags() const override {
     auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
     area_dns_lookup_option_flags.mutable_use_tcp()->set_value(true);
-    area_dns_lookup_option_flags.mutable_no_defalt_search_domain()->set_value(false);
+    area_dns_lookup_option_flags.mutable_no_defalt_search_domain()->set_value(true);
     return area_dns_lookup_option_flags;
   };
 };
@@ -940,6 +941,20 @@ TEST_P(DnsImplAresFlagsForTcpTest, TcpLookupsEnabled) {
   int optmask = 0;
   EXPECT_EQ(ARES_SUCCESS, ares_save_options(peer_->channel(), &opts, &optmask));
   EXPECT_TRUE((opts.flags & ARES_FLAG_USEVC) == ARES_FLAG_USEVC);
+  EXPECT_NE(nullptr,
+            resolveWithUnreferencedParameters("root.cnam.domain", DnsLookupFamily::Auto, true));
+  ares_destroy_options(&opts);
+}
+
+// Validate that c_ares flag `ARES_FLAG_NOSEARCH` is set when boolean property
+// `no_defalt_search_domain` is enabled.
+TEST_P(DnsImplAresFlagsForTcpTest, NoDefaultSearchDomainSet) {
+  server_->addCName("root.cnam.domain", "result.cname.domain");
+  server_->addHosts("result.cname.domain", {"201.134.56.7"}, RecordType::A);
+  ares_options opts{};
+  int optmask = 0;
+  EXPECT_EQ(ARES_SUCCESS, ares_save_options(peer_->channel(), &opts, &optmask));
+  EXPECT_TRUE((opts.flags & ARES_FLAG_NOSEARCH) == ARES_FLAG_NOSEARCH);
   EXPECT_NE(nullptr,
             resolveWithUnreferencedParameters("root.cnam.domain", DnsLookupFamily::Auto, true));
   ares_destroy_options(&opts);
@@ -964,6 +979,20 @@ TEST_P(DnsImplAresFlagsForUdpTest, UdpLookupsEnabled) {
   int optmask = 0;
   EXPECT_EQ(ARES_SUCCESS, ares_save_options(peer_->channel(), &opts, &optmask));
   EXPECT_FALSE((opts.flags & ARES_FLAG_USEVC) == ARES_FLAG_USEVC);
+  EXPECT_NE(nullptr,
+            resolveWithUnreferencedParameters("root.cnam.domain", DnsLookupFamily::Auto, true));
+  ares_destroy_options(&opts);
+}
+
+// Validate that c_ares flag `ARES_FLAG_NOSEARCH` is not set when boolean property
+// `no_defalt_search_domain` is disabled.
+TEST_P(DnsImplAresFlagsForTcpTest, NoDefaultSearchDomainNotSet) {
+  server_->addCName("root.cnam.domain", "result.cname.domain");
+  server_->addHosts("result.cname.domain", {"201.134.56.7"}, RecordType::A);
+  ares_options opts{};
+  int optmask = 0;
+  EXPECT_EQ(ARES_SUCCESS, ares_save_options(peer_->channel(), &opts, &optmask));
+  EXPECT_FALSE((opts.flags & ARES_FLAG_NOSEARCH) == ARES_FLAG_NOSEARCH);
   EXPECT_NE(nullptr,
             resolveWithUnreferencedParameters("root.cnam.domain", DnsLookupFamily::Auto, true));
   ares_destroy_options(&opts);
