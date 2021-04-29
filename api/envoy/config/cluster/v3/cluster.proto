@@ -867,13 +867,8 @@ message Cluster {
   bool use_tcp_for_dns_lookups = 45
       [deprecated = true, (envoy.annotations.deprecated_at_minor_version) = "3.0"];
 
-  // [#next-major-version: Reconcile DNS options in a single message.]
-  // Don't use the default search domains; only query hostnames as-is or as aliases for DNS lookups.
-  //  bool no_default_search_domain_for_dns_lookups = 53;
-
-  //  AreaDnsLookupOptionFlags1 area_dns_lookup_option_flags1 = 54;
-
-  core.v3.AreaDnsLookupOptionFlags area_dns_lookup_option_flags = 53;
+  // Configuration of DNS Lookup option flags which control the behavior of the DNS resolver.
+  core.v3.DnsLookupOptions dns_lookup_options = 53;
 
   // If specified, outlier detection will be enabled for this upstream cluster.
   // Each of the configuration values can be overridden via
