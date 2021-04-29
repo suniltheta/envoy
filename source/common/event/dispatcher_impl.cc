@@ -169,7 +169,7 @@ Network::DnsResolverSharedPtr DispatcherImpl::createDnsResolver(
         "Apple's API only allows overriding DNS resolvers via system settings. Delete resolvers "
         "config or disable the envoy.restart_features.use_apple_api_for_dns_lookups runtime "
         "feature.");
-    RELEASE_ASSERT(!dns_lookup_options_.has_use_tcp_for_dns_lookups() or
+    RELEASE_ASSERT(!dns_lookup_options_.has_use_tcp_for_dns_lookups() ||
                        !dns_lookup_options.use_tcp_for_dns_lookups().value(),
                    "using TCP for DNS lookups is not possible when using Apple APIs for DNS "
                    "resolution. Apple' API only uses UDP for DNS resolution. Use UDP or disable "
