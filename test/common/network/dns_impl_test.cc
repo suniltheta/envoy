@@ -556,7 +556,10 @@ protected:
   virtual bool tcpOnly() const { return true; }
   virtual bool useTcpForDnsLookups() const { return false; }
   virtual envoy::config::core::v3::AreaDnsLookupOptionFlags AreaDnsLookupOptionFlags() const {
-    return envoy::config::core::v3::AreaDnsLookupOptionFlags();
+    auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
+    area_dns_lookup_option_flags.mutable_use_tcp()->set_value(false);
+    area_dns_lookup_option_flags.mutable_no_defalt_search_domain()->set_value(false);
+    return area_dns_lookup_option_flags;
   };
   virtual bool setResolverInConstructor() const { return false; }
   std::unique_ptr<TestDnsServer> server_;
@@ -986,7 +989,7 @@ TEST_P(DnsImplAresFlagsForUdpTest, UdpLookupsEnabled) {
 
 // Validate that c_ares flag `ARES_FLAG_NOSEARCH` is not set when boolean property
 // `no_defalt_search_domain` is disabled.
-TEST_P(DnsImplAresFlagsForTcpTest, NoDefaultSearchDomainNotSet) {
+TEST_P(DnsImplAresFlagsForUdpTest, NoDefaultSearchDomainNotSet) {
   server_->addCName("root.cnam.domain", "result.cname.domain");
   server_->addHosts("result.cname.domain", {"201.134.56.7"}, RecordType::A);
   ares_options opts{};

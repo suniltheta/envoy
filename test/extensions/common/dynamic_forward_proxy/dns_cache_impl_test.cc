@@ -15,6 +15,7 @@
 #include "test/test_common/utility.h"
 
 using testing::InSequence;
+using testing::Ref;
 using testing::Return;
 using testing::SaveArg;
 
@@ -733,9 +734,9 @@ TEST(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionSet) {
   config.mutable_area_dns_lookup_option_flags()->mutable_use_tcp()->set_value(true);
   config.mutable_area_dns_lookup_option_flags()->mutable_no_defalt_search_domain()->set_value(
       false);
-  // TODO(suniltheta): Fix this below line to confirm calling to area_dns_lookup_option_flags
-  // instead of blank _.
-  EXPECT_CALL(dispatcher, createDnsResolver(_, false, _)).WillOnce(Return(resolver));
+
+  EXPECT_CALL(dispatcher, createDnsResolver(_, false, Ref(config.area_dns_lookup_option_flags())))
+      .WillOnce(Return(resolver));
   DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
 }
 
@@ -751,9 +752,9 @@ TEST(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionSet) {
   config.set_use_tcp_for_dns_lookups(true); // making this deprecated field false explicitly
   config.mutable_area_dns_lookup_option_flags()->mutable_use_tcp()->set_value(false);
   config.mutable_area_dns_lookup_option_flags()->mutable_no_defalt_search_domain()->set_value(true);
-  // TODO(suniltheta): Fix this below line to confirm calling to area_dns_lookup_option_flags
-  // instead of blank _.
-  EXPECT_CALL(dispatcher, createDnsResolver(_, false, _)).WillOnce(Return(resolver));
+
+  EXPECT_CALL(dispatcher, createDnsResolver(_, true, Ref(config.area_dns_lookup_option_flags())))
+      .WillOnce(Return(resolver));
   DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
 }
 
@@ -770,9 +771,9 @@ TEST(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionUnSet) {
   config.mutable_area_dns_lookup_option_flags()->mutable_use_tcp()->set_value(false);
   config.mutable_area_dns_lookup_option_flags()->mutable_no_defalt_search_domain()->set_value(
       false);
-  // TODO(suniltheta): Fix this below line to confirm calling to area_dns_lookup_option_flags
-  // instead of blank _.
-  EXPECT_CALL(dispatcher, createDnsResolver(_, false, _)).WillOnce(Return(resolver));
+
+  EXPECT_CALL(dispatcher, createDnsResolver(_, false, Ref(config.area_dns_lookup_option_flags())))
+      .WillOnce(Return(resolver));
   DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
 }
 
@@ -789,9 +790,9 @@ TEST(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionUnSet) {
   config.mutable_area_dns_lookup_option_flags()->mutable_use_tcp()->set_value(false);
   config.mutable_area_dns_lookup_option_flags()->mutable_no_defalt_search_domain()->set_value(
       false);
-  // TODO(suniltheta): Fix this below line to confirm calling to area_dns_lookup_option_flags
-  // instead of blank _.
-  EXPECT_CALL(dispatcher, createDnsResolver(_, false, _)).WillOnce(Return(resolver));
+
+  EXPECT_CALL(dispatcher, createDnsResolver(_, false, Ref(config.area_dns_lookup_option_flags())))
+      .WillOnce(Return(resolver));
   DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
 }
 

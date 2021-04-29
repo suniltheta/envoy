@@ -31,6 +31,7 @@ using ::testing::Invoke;
 using ::testing::InvokeWithoutArgs;
 using ::testing::Mock;
 using ::testing::NiceMock;
+using ::testing::Ref;
 using ::testing::Return;
 using ::testing::ReturnNew;
 using ::testing::ReturnRef;
@@ -2459,7 +2460,8 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolver) {
   // EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, true, area_dns_lookup_option_flags))
   // TODO(suniltheta): Fix this below line to confirm calling to area_dns_lookup_option_flags
   // instead of blank _.
-  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, true, _)).WillOnce(Return(dns_resolver));
+  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, false, Ref(area_dns_lookup_option_flags)))
+      .WillOnce(Return(dns_resolver));
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
