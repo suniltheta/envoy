@@ -205,14 +205,13 @@ public:
    * empty, it will not use any specific resolvers, but use defaults (/etc/resolv.conf)
    * @param use_tcp_for_dns_lookups if set to true, tcp will be used to perform dns lookups.
    * Otherwise, udp is used.
-   * @param no_default_search_domain_for_dns_lookups if set to true, default search domains will not
-   * be used for dns lookups.
+   * @param dns_lookup_options supplies the aggregated area options flags needed for dns resolver
+   * init.
    * @return Network::DnsResolverSharedPtr that is owned by the caller.
    */
-  virtual Network::DnsResolverSharedPtr createDnsResolver(
-      const std::vector<Network::Address::InstanceConstSharedPtr>& resolvers,
-      const bool use_tcp_for_dns_lookups,
-      const envoy::config::core::v3::AreaDnsLookupOptionFlags& area_dns_lookup_option_flags) PURE;
+  virtual Network::DnsResolverSharedPtr
+  createDnsResolver(const std::vector<Network::Address::InstanceConstSharedPtr>& resolvers,
+                    const envoy::config::core::v3::DnsLookupOptions& dns_lookup_options) PURE;
 
   /**
    * @return Filesystem::WatcherPtr a filesystem watcher owned by the caller.

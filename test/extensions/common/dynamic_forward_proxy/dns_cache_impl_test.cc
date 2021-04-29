@@ -33,7 +33,7 @@ public:
 
     EXPECT_CALL(dispatcher_, isThreadSafe).WillRepeatedly(Return(true));
 
-    EXPECT_CALL(dispatcher_, createDnsResolver(_, _, _)).WillOnce(Return(resolver_));
+    EXPECT_CALL(dispatcher_, createDnsResolver(_, _)).WillOnce(Return(resolver_));
     dns_cache_ =
         std::make_unique<DnsCacheImpl>(dispatcher_, tls_, random_, loader_, store_, config_);
     update_callbacks_handle_ = dns_cache_->addUpdateCallbacks(update_callbacks_);
@@ -730,12 +730,10 @@ TEST(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionSet) {
   Stats::IsolatedStoreImpl store;
 
   envoy::extensions::common::dynamic_forward_proxy::v3::DnsCacheConfig config;
-  config.set_use_tcp_for_dns_lookups(false); // making this deprecated field false explicitly
-  config.mutable_area_dns_lookup_option_flags()->mutable_use_tcp()->set_value(true);
-  config.mutable_area_dns_lookup_option_flags()->mutable_no_defalt_search_domain()->set_value(
-      false);
+  config.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(true);
+  config.mutable_dns_lookup_options()->mutable_no_defalt_search_domain()->set_value(false);
 
-  EXPECT_CALL(dispatcher, createDnsResolver(_, false, Ref(config.area_dns_lookup_option_flags())))
+  EXPECT_CALL(dispatcher, createDnsResolver(_, Ref(config.dns_lookup_options())))
       .WillOnce(Return(resolver));
   DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
 }
@@ -749,11 +747,10 @@ TEST(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionSet) {
   Stats::IsolatedStoreImpl store;
 
   envoy::extensions::common::dynamic_forward_proxy::v3::DnsCacheConfig config;
-  config.set_use_tcp_for_dns_lookups(true); // making this deprecated field false explicitly
-  config.mutable_area_dns_lookup_option_flags()->mutable_use_tcp()->set_value(false);
-  config.mutable_area_dns_lookup_option_flags()->mutable_no_defalt_search_domain()->set_value(true);
+  config.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
+  config.mutable_dns_lookup_options()->mutable_no_defalt_search_domain()->set_value(true);
 
-  EXPECT_CALL(dispatcher, createDnsResolver(_, true, Ref(config.area_dns_lookup_option_flags())))
+  EXPECT_CALL(dispatcher, createDnsResolver(_, Ref(config.dns_lookup_options())))
       .WillOnce(Return(resolver));
   DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
 }
@@ -767,12 +764,10 @@ TEST(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionUnSet) {
   Stats::IsolatedStoreImpl store;
 
   envoy::extensions::common::dynamic_forward_proxy::v3::DnsCacheConfig config;
-  config.set_use_tcp_for_dns_lookups(false); // making this deprecated field false explicitly
-  config.mutable_area_dns_lookup_option_flags()->mutable_use_tcp()->set_value(false);
-  config.mutable_area_dns_lookup_option_flags()->mutable_no_defalt_search_domain()->set_value(
-      false);
+  config.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
+  config.mutable_dns_lookup_options()->mutable_no_defalt_search_domain()->set_value(false);
 
-  EXPECT_CALL(dispatcher, createDnsResolver(_, false, Ref(config.area_dns_lookup_option_flags())))
+  EXPECT_CALL(dispatcher, createDnsResolver(_, Ref(config.dns_lookup_options())))
       .WillOnce(Return(resolver));
   DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
 }
@@ -786,12 +781,10 @@ TEST(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionUnSet) {
   Stats::IsolatedStoreImpl store;
 
   envoy::extensions::common::dynamic_forward_proxy::v3::DnsCacheConfig config;
-  config.set_use_tcp_for_dns_lookups(false); // making this deprecated field false explicitly
-  config.mutable_area_dns_lookup_option_flags()->mutable_use_tcp()->set_value(false);
-  config.mutable_area_dns_lookup_option_flags()->mutable_no_defalt_search_domain()->set_value(
-      false);
+  config.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
+  config.mutable_dns_lookup_options()->mutable_no_defalt_search_domain()->set_value(false);
 
-  EXPECT_CALL(dispatcher, createDnsResolver(_, false, Ref(config.area_dns_lookup_option_flags())))
+  EXPECT_CALL(dispatcher, createDnsResolver(_, Ref(config.dns_lookup_options())))
       .WillOnce(Return(resolver));
   DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
 }

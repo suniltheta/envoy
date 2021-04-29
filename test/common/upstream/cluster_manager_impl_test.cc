@@ -2008,7 +2008,7 @@ TEST_F(ClusterManagerImplTest, DynamicHostRemove) {
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _, _)).WillOnce(Return(dns_resolver));
+  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _)).WillOnce(Return(dns_resolver));
 
   Network::DnsResolver::ResolveCb dns_callback;
   Event::MockTimer* dns_timer_ = new NiceMock<Event::MockTimer>(&factory_.dispatcher_);
@@ -2154,7 +2154,7 @@ TEST_F(ClusterManagerImplTest, DynamicHostRemoveWithTls) {
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _, _)).WillOnce(Return(dns_resolver));
+  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _)).WillOnce(Return(dns_resolver));
 
   Network::DnsResolver::ResolveCb dns_callback;
   Event::MockTimer* dns_timer_ = new NiceMock<Event::MockTimer>(&factory_.dispatcher_);
@@ -2378,9 +2378,8 @@ TEST_F(ClusterManagerImplTest, DynamicHostRemoveWithTls) {
 // configured per cluster and `use_tcp_for_dns_lookups` is set in bootstrap config.
 TEST_F(ClusterManagerImplTest, UseTcpInDefaultDnsResolver) {
   const std::string yaml = R"EOF(
-  use_tcp_for_dns_lookups: false
-  area_dns_lookup_option_flags:
-    use_tcp: true
+  dns_lookup_options:
+    use_tcp_for_dns_lookups: true
     no_defalt_search_domain: false
   static_resources:
     clusters:
@@ -2392,7 +2391,7 @@ TEST_F(ClusterManagerImplTest, UseTcpInDefaultDnsResolver) {
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
   // As custom resolvers are not specified in config, this method should not be called,
   // resolver from context should be used instead.
-  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _, _)).Times(0);
+  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _)).Times(0);
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
@@ -2419,11 +2418,11 @@ TEST_F(ClusterManagerImplTest, UseUdpWithCustomDnsResolver) {
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
   // `false` here stands for using udp
-  auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
-  // EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, false, area_dns_lookup_option_flags))
-  // TODO(suniltheta): Fix this below line to confirm calling to area_dns_lookup_option_flags
+  auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
+  // TODO(suniltheta): Fix this below line to confirm calling to dns_lookup_options
   // instead of blank _.
-  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, false, _)).WillOnce(Return(dns_resolver));
+  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, Ref(dns_lookup_options)))
+      .WillOnce(Return(dns_resolver));
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
@@ -2440,9 +2439,8 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolver) {
   static_resources:
     clusters:
     - name: cluster_1
-      use_tcp_for_dns_lookups: false
-      area_dns_lookup_option_flags:
-        use_tcp: true
+      dns_lookup_options:
+        use_tcp_for_dns_lookups: true
         no_defalt_search_domain: false
       connect_timeout: 0.250s
       type: STRICT_DNS
@@ -2454,13 +2452,12 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolver) {
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
   // `true` here stands for using tcp
-  auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
-  area_dns_lookup_option_flags.mutable_use_tcp()->set_value(true);
-  area_dns_lookup_option_flags.mutable_no_defalt_search_domain()->set_value(false);
-  // EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, true, area_dns_lookup_option_flags))
-  // TODO(suniltheta): Fix this below line to confirm calling to area_dns_lookup_option_flags
+  auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
+  dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
+  dns_lookup_options.mutable_no_defalt_search_domain()->set_value(false);
+  // TODO(suniltheta): Fix this below line to confirm calling to dns_lookup_options
   // instead of blank _.
-  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, false, Ref(area_dns_lookup_option_flags)))
+  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, Ref(dns_lookup_options)))
       .WillOnce(Return(dns_resolver));
 
   Network::DnsResolver::ResolveCb dns_callback;
@@ -2499,7 +2496,7 @@ TEST_F(ClusterManagerImplTest, DynamicHostRemoveDefaultPriority) {
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _, _)).WillOnce(Return(dns_resolver));
+  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _)).WillOnce(Return(dns_resolver));
 
   Network::DnsResolver::ResolveCb dns_callback;
   Event::MockTimer* dns_timer_ = new NiceMock<Event::MockTimer>(&factory_.dispatcher_);
@@ -2585,7 +2582,7 @@ TEST_F(ClusterManagerImplTest, ConnPoolDestroyWithDraining) {
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _, _)).WillOnce(Return(dns_resolver));
+  EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _)).WillOnce(Return(dns_resolver));
 
   Network::DnsResolver::ResolveCb dns_callback;
   Event::MockTimer* dns_timer_ = new NiceMock<Event::MockTimer>(&factory_.dispatcher_);

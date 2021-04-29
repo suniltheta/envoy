@@ -68,10 +68,7 @@ public:
                          const Network::ConnectionSocket::OptionsSharedPtr& options) override;
   Network::DnsResolverSharedPtr
   createDnsResolver(const std::vector<Network::Address::InstanceConstSharedPtr>& resolvers,
-                    const bool use_tcp_for_dns_lookups,
-                    const envoy::config::core::v3::AreaDnsLookupOptionFlags&
-                        area_dns_lookup_option_flags) override;
-  //                    const bool no_default_search_domain_for_dns_lookups) override;
+                    const envoy::config::core::v3::DnsLookupOptions& dns_lookup_options) override;
   FileEventPtr createFileEvent(os_fd_t fd, FileReadyCb cb, FileTriggerType trigger,
                                uint32_t events) override;
   Filesystem::WatcherPtr createFilesystemWatcher() override;

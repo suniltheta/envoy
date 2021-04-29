@@ -357,9 +357,8 @@ TEST_F(DnsImplConstructor, SupportsCustomResolvers) {
   auto addr4 = Network::Utility::parseInternetAddressAndPort("127.0.0.1:54");
   char addr6str[INET6_ADDRSTRLEN];
   auto addr6 = Network::Utility::parseInternetAddressAndPort("[::1]:54");
-  auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
-  auto resolver =
-      dispatcher_->createDnsResolver({addr4, addr6}, false, area_dns_lookup_option_flags);
+  auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
+  auto resolver = dispatcher_->createDnsResolver({addr4, addr6}, dns_lookup_options);
   auto peer = std::make_unique<DnsResolverImplPeer>(dynamic_cast<DnsResolverImpl*>(resolver.get()));
   ares_addr_port_node* resolvers;
   int result = ares_get_servers_ports(peer->channel(), &resolvers);
@@ -410,9 +409,8 @@ private:
 TEST_F(DnsImplConstructor, SupportCustomAddressInstances) {
   auto test_instance(std::make_shared<CustomInstance>("127.0.0.1", 45));
   EXPECT_EQ(test_instance->asString(), "127.0.0.1:borked_port_45");
-  auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
-  auto resolver =
-      dispatcher_->createDnsResolver({test_instance}, false, area_dns_lookup_option_flags);
+  auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
+  auto resolver = dispatcher_->createDnsResolver({test_instance}, dns_lookup_options);
   auto peer = std::make_unique<DnsResolverImplPeer>(dynamic_cast<DnsResolverImpl*>(resolver.get()));
   ares_addr_port_node* resolvers;
   int result = ares_get_servers_ports(peer->channel(), &resolvers);
@@ -428,10 +426,9 @@ TEST_F(DnsImplConstructor, BadCustomResolvers) {
   envoy::config::core::v3::Address pipe_address;
   pipe_address.mutable_pipe()->set_path("foo");
   auto pipe_instance = Network::Utility::protobufAddressToAddress(pipe_address);
-  auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
-  EXPECT_THROW_WITH_MESSAGE(
-      dispatcher_->createDnsResolver({pipe_instance}, false, area_dns_lookup_option_flags),
-      EnvoyException, "DNS resolver 'foo' is not an IP address");
+  auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
+  EXPECT_THROW_WITH_MESSAGE(dispatcher_->createDnsResolver({pipe_instance}, dns_lookup_options),
+                            EnvoyException, "DNS resolver 'foo' is not an IP address");
 }
 
 class DnsImplTest : public testing::TestWithParam<Address::IpVersion> {
@@ -448,10 +445,9 @@ public:
 
     if (setResolverInConstructor()) {
       resolver_ = dispatcher_->createDnsResolver({socket_->addressProvider().localAddress()},
-                                                 useTcpForDnsLookups(), AreaDnsLookupOptionFlags());
+                                                 DnsLookupOptions());
     } else {
-      resolver_ =
-          dispatcher_->createDnsResolver({}, useTcpForDnsLookups(), AreaDnsLookupOptionFlags());
+      resolver_ = dispatcher_->createDnsResolver({}, DnsLookupOptions());
     }
 
     // Point c-ares at the listener with no search domains and TCP-only.
@@ -554,12 +550,11 @@ protected:
   // Should the DnsResolverImpl use a zero timeout for c-ares queries?
   virtual bool zeroTimeout() const { return false; }
   virtual bool tcpOnly() const { return true; }
-  virtual bool useTcpForDnsLookups() const { return false; }
-  virtual envoy::config::core::v3::AreaDnsLookupOptionFlags AreaDnsLookupOptionFlags() const {
-    auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
-    area_dns_lookup_option_flags.mutable_use_tcp()->set_value(false);
-    area_dns_lookup_option_flags.mutable_no_defalt_search_domain()->set_value(false);
-    return area_dns_lookup_option_flags;
+  virtual envoy::config::core::v3::DnsLookupOptions DnsLookupOptions() const {
+    auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
+    dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(false);
+    dns_lookup_options.mutable_no_defalt_search_domain()->set_value(false);
+    return dns_lookup_options;
   };
   virtual bool setResolverInConstructor() const { return false; }
   std::unique_ptr<TestDnsServer> server_;
@@ -889,8 +884,8 @@ TEST_P(DnsImplTest, PendingTimerEnable) {
   Event::MockDispatcher dispatcher;
   Event::MockTimer* timer = new NiceMock<Event::MockTimer>();
   EXPECT_CALL(dispatcher, createTimer_(_)).WillOnce(Return(timer));
-  resolver_ = std::make_shared<DnsResolverImpl>(
-      dispatcher, vec, false, envoy::config::core::v3::AreaDnsLookupOptionFlags());
+  resolver_ = std::make_shared<DnsResolverImpl>(dispatcher, vec,
+                                                envoy::config::core::v3::DnsLookupOptions());
   Event::FileEvent* file_event = new NiceMock<Event::MockFileEvent>();
   EXPECT_CALL(dispatcher, createFileEvent_(_, _, _, _)).WillOnce(Return(file_event));
   EXPECT_CALL(*timer, enableTimer(_, _));
@@ -921,12 +916,11 @@ TEST_P(DnsImplZeroTimeoutTest, Timeout) {
 class DnsImplAresFlagsForTcpTest : public DnsImplTest {
 protected:
   bool tcpOnly() const override { return false; }
-  bool useTcpForDnsLookups() const override { return true; }
-  envoy::config::core::v3::AreaDnsLookupOptionFlags AreaDnsLookupOptionFlags() const override {
-    auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
-    area_dns_lookup_option_flags.mutable_use_tcp()->set_value(true);
-    area_dns_lookup_option_flags.mutable_no_defalt_search_domain()->set_value(true);
-    return area_dns_lookup_option_flags;
+  envoy::config::core::v3::DnsLookupOptions DnsLookupOptions() const override {
+    auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
+    dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
+    dns_lookup_options.mutable_no_defalt_search_domain()->set_value(true);
+    return dns_lookup_options;
   };
 };
 
@@ -1003,12 +997,11 @@ TEST_P(DnsImplAresFlagsForUdpTest, NoDefaultSearchDomainNotSet) {
 
 class DnsImplCustomResolverTest : public DnsImplTest {
   bool tcpOnly() const override { return false; }
-  bool useTcpForDnsLookups() const override { return true; }
-  envoy::config::core::v3::AreaDnsLookupOptionFlags AreaDnsLookupOptionFlags() const override {
-    auto area_dns_lookup_option_flags = envoy::config::core::v3::AreaDnsLookupOptionFlags();
-    area_dns_lookup_option_flags.mutable_use_tcp()->set_value(true);
-    area_dns_lookup_option_flags.mutable_no_defalt_search_domain()->set_value(false);
-    return area_dns_lookup_option_flags;
+  envoy::config::core::v3::DnsLookupOptions DnsLookupOptions() const override {
+    auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
+    dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
+    dns_lookup_options.mutable_no_defalt_search_domain()->set_value(true);
+    return dns_lookup_options;
   };
   bool setResolverInConstructor() const override { return true; }
 };

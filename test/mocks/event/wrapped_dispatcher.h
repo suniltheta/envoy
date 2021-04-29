@@ -52,11 +52,8 @@ public:
 
   Network::DnsResolverSharedPtr
   createDnsResolver(const std::vector<Network::Address::InstanceConstSharedPtr>& resolvers,
-                    const bool use_tcp_for_dns_lookups,
-                    const envoy::config::core::v3::AreaDnsLookupOptionFlags&
-                        area_dns_lookup_option_flags) override {
-    return impl_.createDnsResolver(resolvers, use_tcp_for_dns_lookups,
-                                   area_dns_lookup_option_flags);
+                    const envoy::config::core::v3::DnsLookupOptions& dns_lookup_options) override {
+    return impl_.createDnsResolver(resolvers, dns_lookup_options);
   }
 
   FileEventPtr createFileEvent(os_fd_t fd, FileReadyCb cb, FileTriggerType trigger,

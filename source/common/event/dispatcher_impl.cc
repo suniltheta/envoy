@@ -157,9 +157,7 @@ DispatcherImpl::createClientConnection(Network::Address::InstanceConstSharedPtr 
 
 Network::DnsResolverSharedPtr DispatcherImpl::createDnsResolver(
     const std::vector<Network::Address::InstanceConstSharedPtr>& resolvers,
-    const bool use_tcp_for_dns_lookups,
-    const envoy::config::core::v3::AreaDnsLookupOptionFlags& area_dns_lookup_option_flags) {
-  //    bool no_default_search_domain_for_dns_lookups) {
+    const envoy::config::core::v3::DnsLookupOptions& dns_lookup_options) {
   ASSERT(isThreadSafe());
 #ifdef __APPLE__
   static bool use_apple_api_for_dns_lookups =
@@ -171,7 +169,8 @@ Network::DnsResolverSharedPtr DispatcherImpl::createDnsResolver(
         "Apple's API only allows overriding DNS resolvers via system settings. Delete resolvers "
         "config or disable the envoy.restart_features.use_apple_api_for_dns_lookups runtime "
         "feature.");
-    RELEASE_ASSERT(!use_tcp_for_dns_lookups,
+    RELEASE_ASSERT(!dns_lookup_options_.has_use_tcp_for_dns_lookups() or
+                       !dns_lookup_options.use_tcp_for_dns_lookups().value(),
                    "using TCP for DNS lookups is not possible when using Apple APIs for DNS "
                    "resolution. Apple' API only uses UDP for DNS resolution. Use UDP or disable "
                    "the envoy.restart_features.use_apple_api_for_dns_lookups runtime feature.");
@@ -179,8 +178,7 @@ Network::DnsResolverSharedPtr DispatcherImpl::createDnsResolver(
                                                            api_.rootScope());
   }
 #endif
-  return std::make_shared<Network::DnsResolverImpl>(*this, resolvers, use_tcp_for_dns_lookups,
-                                                    area_dns_lookup_option_flags);
+  return std::make_shared<Network::DnsResolverImpl>(*this, resolvers, dns_lookup_options);
 }
 
 FileEventPtr DispatcherImpl::createFileEvent(os_fd_t fd, FileReadyCb cb, FileTriggerType trigger,

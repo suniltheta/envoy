@@ -23,15 +23,10 @@ namespace Network {
 DnsResolverImpl::DnsResolverImpl(
     Event::Dispatcher& dispatcher,
     const std::vector<Network::Address::InstanceConstSharedPtr>& resolvers,
-    const bool use_tcp_for_dns_lookups,
-    const envoy::config::core::v3::AreaDnsLookupOptionFlags& area_dns_lookup_option_flags)
-    //    const bool no_default_search_domain_for_dns_lookups)
+    const envoy::config::core::v3::DnsLookupOptions& dns_lookup_options)
     : dispatcher_(dispatcher),
       timer_(dispatcher.createTimer([this] { onEventCallback(ARES_SOCKET_BAD, 0); })),
-      use_tcp_for_dns_lookups_(use_tcp_for_dns_lookups),
-      area_dns_lookup_option_flags_(area_dns_lookup_option_flags),
-      //      no_default_search_domain_for_dns_lookups_(no_default_search_domain_for_dns_lookups),
-      resolvers_csv_(maybeBuildResolversCsv(resolvers)) {
+      dns_lookup_options_(dns_lookup_options), resolvers_csv_(maybeBuildResolversCsv(resolvers)) {
   AresOptions options = defaultAresOptions();
   initializeChannel(&options.options_, options.optmask_);
 }
@@ -70,14 +65,14 @@ absl::optional<std::string> DnsResolverImpl::maybeBuildResolversCsv(
 DnsResolverImpl::AresOptions DnsResolverImpl::defaultAresOptions() {
   AresOptions options{};
 
-  if (area_dns_lookup_option_flags_.has_use_tcp() &&
-      area_dns_lookup_option_flags_.use_tcp().value()) {
+  if (dns_lookup_options_.has_use_tcp_for_dns_lookups() &&
+      dns_lookup_options_.use_tcp_for_dns_lookups().value()) {
     options.optmask_ |= ARES_OPT_FLAGS;
     options.options_.flags |= ARES_FLAG_USEVC;
   }
 
-  if (area_dns_lookup_option_flags_.has_no_defalt_search_domain() &&
-      area_dns_lookup_option_flags_.no_defalt_search_domain().value()) {
+  if (dns_lookup_options_.has_no_defalt_search_domain() &&
+      dns_lookup_options_.no_defalt_search_domain().value()) {
     options.optmask_ |= ARES_OPT_FLAGS;
     options.options_.flags |= ARES_FLAG_NOSEARCH;
   }
