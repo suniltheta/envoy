@@ -118,15 +118,15 @@ protected:
 };
 
 TEST_F(AppleDnsImplTest, InvalidConfigOptions) {
-  auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
-  dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
-  dns_lookup_options.mutable_no_default_search_domain()->set_value(false);
+  auto dns_resolver_options = envoy::config::core::v3::DnsResolverOptions();
+  dns_resolver_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
+  dns_resolver_options.mutable_no_default_search_domain()->set_value(false);
   EXPECT_DEATH(
-      dispatcher_->createDnsResolver({}, dns_lookup_options),
+      dispatcher_->createDnsResolver({}, dns_resolver_options),
       "using TCP for DNS lookups is not possible when using Apple APIs for DNS resolution");
-  dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(false);
+  dns_resolver_options.mutable_use_tcp_for_dns_lookups()->set_value(false);
   EXPECT_DEATH(
-      dispatcher_->createDnsResolver({nullptr}, dns_lookup_options),
+      dispatcher_->createDnsResolver({nullptr}, dns_resolver_options),
       "defining custom resolvers is not possible when using Apple APIs for DNS resolution");
 }
 

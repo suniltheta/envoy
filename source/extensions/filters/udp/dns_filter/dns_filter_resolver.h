@@ -23,7 +23,7 @@ public:
                     uint64_t max_pending_lookups)
       : timeout_(timeout), dispatcher_(dispatcher),
         resolver_(
-            dispatcher.createDnsResolver(resolvers, envoy::config::core::v3::DnsLookupOptions())),
+            dispatcher.createDnsResolver(resolvers, envoy::config::core::v3::DnsResolverOptions())),
         callback_(callback), max_pending_lookups_(max_pending_lookups) {}
   /**
    * @brief entry point to resolve the name in a DnsQueryRecord

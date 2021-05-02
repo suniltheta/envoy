@@ -726,81 +726,81 @@ class DnsCacheImplOptionsTest : public DnsCacheImplTest {
 public:
   void useTcpForDnsLookupsDeprecatedField() { config_.set_use_tcp_for_dns_lookups(true); }
   void useTcpForDnsLookups() {
-    config_.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(true);
+    config_.mutable_dns_resolver_options()->mutable_use_tcp_for_dns_lookups()->set_value(true);
   }
   void useUcpForDnsLookups() {
-    config_.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
+    config_.mutable_dns_resolver_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
   }
   void doNotUseDefaultSearchDomain() {
-    config_.mutable_dns_lookup_options()->mutable_no_default_search_domain()->set_value(true);
+    config_.mutable_dns_resolver_options()->mutable_no_default_search_domain()->set_value(true);
   }
   void useDefaultSearchDomain() {
-    config_.mutable_dns_lookup_options()->mutable_no_default_search_domain()->set_value(false);
+    config_.mutable_dns_resolver_options()->mutable_no_default_search_domain()->set_value(false);
   }
 };
 
 TEST_F(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionSetDeprecatedField) {
   initialize();
   useTcpForDnsLookupsDeprecatedField();
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(resolver_)));
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
   // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config.
-  EXPECT_EQ(true, dns_lookup_options.has_use_tcp_for_dns_lookups());
-  // `true` here means dns_lookup_options.use_tcp_for_dns_lookups is set to true.
-  EXPECT_EQ(true, dns_lookup_options.no_default_search_domain().value());
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
+  EXPECT_EQ(true, dns_resolver_options.no_default_search_domain().value());
   DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
 TEST_F(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionSet) {
   initialize();
   useTcpForDnsLookups();
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(resolver_)));
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
   // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config.
-  EXPECT_EQ(true, dns_lookup_options.has_use_tcp_for_dns_lookups());
-  // `true` here means dns_lookup_options.use_tcp_for_dns_lookups is set to true.
-  EXPECT_EQ(true, dns_lookup_options.use_tcp_for_dns_lookups().value());
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
+  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
   DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
 TEST_F(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionSet) {
   initialize();
   doNotUseDefaultSearchDomain();
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(resolver_)));
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
   // `true` here means no_default_search_domain is being set via bootstrap config.
-  EXPECT_EQ(true, dns_lookup_options.has_no_default_search_domain());
-  // `true` here means dns_lookup_options.no_default_search_domain is set to true.
-  EXPECT_EQ(true, dns_lookup_options.no_default_search_domain().value());
+  EXPECT_EQ(true, dns_resolver_options.has_no_default_search_domain());
+  // `true` here means dns_resolver_options.no_default_search_domain is set to true.
+  EXPECT_EQ(true, dns_resolver_options.no_default_search_domain().value());
   DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
 TEST_F(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionUnSet) {
   initialize();
   useUcpForDnsLookups();
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(resolver_)));
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
   // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config.
-  EXPECT_EQ(true, dns_lookup_options.has_use_tcp_for_dns_lookups());
-  // `false` here means dns_lookup_options.use_tcp_for_dns_lookups is set to false.
-  EXPECT_EQ(false, dns_lookup_options.use_tcp_for_dns_lookups().value());
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `false` here means dns_resolver_options.use_tcp_for_dns_lookups is set to false.
+  EXPECT_EQ(false, dns_resolver_options.use_tcp_for_dns_lookups().value());
   DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
 TEST_F(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionUnSet) {
   initialize();
   useDefaultSearchDomain();
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(resolver_)));
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
   // `true` here means no_default_search_domain is being set via bootstrap config.
-  EXPECT_EQ(true, dns_lookup_options.has_no_default_search_domain());
-  // `false` here means dns_lookup_options.no_default_search_domain is set to false.
-  EXPECT_EQ(false, dns_lookup_options.no_default_search_domain().value());
+  EXPECT_EQ(true, dns_resolver_options.has_no_default_search_domain());
+  // `false` here means dns_resolver_options.no_default_search_domain is set to false.
+  EXPECT_EQ(false, dns_resolver_options.no_default_search_domain().value());
   DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 

@@ -222,8 +222,8 @@ message Bootstrap {
   // :ref:`stats sinks <envoy_api_msg_config.metrics.v4alpha.StatsSink>`.
   google.protobuf.UInt64Value stats_server_version_override = 19;
 
-  // Configuration of DNS Lookup option flags which control the behavior of the DNS resolver.
-  core.v4alpha.DnsLookupOptions dns_lookup_options = 30;
+  // Configuration of DNS resolver option flags which control the behavior of the DNS resolver.
+  core.v4alpha.DnsResolverOptions dns_resolver_options = 30;
 
   // Specifies optional bootstrap extensions to be instantiated at startup time.
   // Each item contains extension specific configuration.

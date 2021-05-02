@@ -2379,7 +2379,7 @@ TEST_F(ClusterManagerImplTest, DynamicHostRemoveWithTls) {
 TEST_F(ClusterManagerImplTest, UseTcpInDefaultDnsResolver) {
   const std::string yaml = R"EOF(
   use_tcp_for_dns_lookups: true
-  dns_lookup_options:
+  dns_resolver_options:
     use_tcp_for_dns_lookups: true
     no_default_search_domain: true
   static_resources:
@@ -2418,11 +2418,11 @@ TEST_F(ClusterManagerImplTest, UseUdpWithCustomDnsResolver) {
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(dns_resolver)));
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
   // `false` here means use_tcp_for_dns_lookups is not being set via bootstrap config
-  EXPECT_EQ(false, dns_lookup_options.has_use_tcp_for_dns_lookups());
+  EXPECT_EQ(false, dns_resolver_options.has_use_tcp_for_dns_lookups());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
@@ -2449,13 +2449,13 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolverViaDeprecatedField) {
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(dns_resolver)));
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
   // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config
-  EXPECT_EQ(true, dns_lookup_options.has_use_tcp_for_dns_lookups());
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
   // `true` here means use_tcp_for_dns_lookups is set to true
-  EXPECT_EQ(true, dns_lookup_options.use_tcp_for_dns_lookups().value());
+  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
@@ -2467,14 +2467,14 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolverViaDeprecatedField) {
 
 // Test that custom DNS resolver with UDP lookups is used, when custom resolver is configured
 // per cluster and `use_tcp_for_dns_lookups` is specified as true but is overridden
-// by dns_lookup_options.use_tcp_for_dns_lookups which is set as false.
+// by dns_resolver_options.use_tcp_for_dns_lookups which is set as false.
 TEST_F(ClusterManagerImplTest, UseUdpWithCustomDnsResolverDeprecatedFieldOverridden) {
   const std::string yaml = R"EOF(
   static_resources:
     clusters:
     - name: cluster_1
       use_tcp_for_dns_lookups: true
-      dns_lookup_options:
+      dns_resolver_options:
         use_tcp_for_dns_lookups: false
       connect_timeout: 0.250s
       type: STRICT_DNS
@@ -2485,14 +2485,14 @@ TEST_F(ClusterManagerImplTest, UseUdpWithCustomDnsResolverDeprecatedFieldOverrid
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(dns_resolver)));
-  // `true` here means use_tcp_for_dns_lookups or dns_lookup_options.use_tcp_for_dns_lookups
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
+  // `true` here means use_tcp_for_dns_lookups or dns_resolver_options.use_tcp_for_dns_lookups
   // is being set via bootstrap config.
-  EXPECT_EQ(true, dns_lookup_options.has_use_tcp_for_dns_lookups());
-  // `false` here means dns_lookup_options.use_tcp_for_dns_lookups is set to false.
-  EXPECT_EQ(false, dns_lookup_options.use_tcp_for_dns_lookups().value());
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `false` here means dns_resolver_options.use_tcp_for_dns_lookups is set to false.
+  EXPECT_EQ(false, dns_resolver_options.use_tcp_for_dns_lookups().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
@@ -2504,14 +2504,14 @@ TEST_F(ClusterManagerImplTest, UseUdpWithCustomDnsResolverDeprecatedFieldOverrid
 
 // Test that custom DNS resolver with TCP lookups is used, when custom resolver is configured
 // per cluster and `use_tcp_for_dns_lookups` is specified as false but is overridden
-// by dns_lookup_options.use_tcp_for_dns_lookups which is specified as true.
+// by dns_resolver_options.use_tcp_for_dns_lookups which is specified as true.
 TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolverDeprecatedFieldOverridden) {
   const std::string yaml = R"EOF(
   static_resources:
     clusters:
     - name: cluster_1
       use_tcp_for_dns_lookups: false
-      dns_lookup_options:
+      dns_resolver_options:
         use_tcp_for_dns_lookups: true
       connect_timeout: 0.250s
       type: STRICT_DNS
@@ -2522,14 +2522,14 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolverDeprecatedFieldOverrid
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(dns_resolver)));
-  // `true` here means use_tcp_for_dns_lookups or dns_lookup_options.use_tcp_for_dns_lookups
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
+  // `true` here means use_tcp_for_dns_lookups or dns_resolver_options.use_tcp_for_dns_lookups
   // is being set via bootstrap config.
-  EXPECT_EQ(true, dns_lookup_options.has_use_tcp_for_dns_lookups());
-  // `true` here means dns_lookup_options.use_tcp_for_dns_lookups is set to true.
-  EXPECT_EQ(true, dns_lookup_options.use_tcp_for_dns_lookups().value());
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
+  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
@@ -2540,13 +2540,13 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolverDeprecatedFieldOverrid
 }
 
 // Test that custom DNS resolver with TCP lookups is used, when custom resolver is configured
-// per cluster and `dns_lookup_options.use_tcp_for_dns_lookups` is enabled for that cluster.
+// per cluster and `dns_resolver_options.use_tcp_for_dns_lookups` is enabled for that cluster.
 TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolver) {
   const std::string yaml = R"EOF(
   static_resources:
     clusters:
     - name: cluster_1
-      dns_lookup_options:
+      dns_resolver_options:
         use_tcp_for_dns_lookups: true
       connect_timeout: 0.250s
       type: STRICT_DNS
@@ -2557,14 +2557,14 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolver) {
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(dns_resolver)));
-  // `true` here means use_tcp_for_dns_lookups or dns_lookup_options.use_tcp_for_dns_lookups
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
+  // `true` here means use_tcp_for_dns_lookups or dns_resolver_options.use_tcp_for_dns_lookups
   // is being set via bootstrap config.
-  EXPECT_EQ(true, dns_lookup_options.has_use_tcp_for_dns_lookups());
-  // `true` here means dns_lookup_options.use_tcp_for_dns_lookups is set to true.
-  EXPECT_EQ(true, dns_lookup_options.use_tcp_for_dns_lookups().value());
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
+  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
@@ -2590,11 +2590,11 @@ TEST_F(ClusterManagerImplTest, DefaultSearchDomainWithCustomDnsResolver) {
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(dns_resolver)));
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
   // `false` here means no_default_search_domain is not being set via bootstrap config
-  EXPECT_EQ(false, dns_lookup_options.has_no_default_search_domain());
+  EXPECT_EQ(false, dns_resolver_options.has_no_default_search_domain());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
@@ -2611,7 +2611,7 @@ TEST_F(ClusterManagerImplTest, DefaultSearchDomainWithCustomDnsResolverWithConfi
   static_resources:
     clusters:
     - name: cluster_1
-      dns_lookup_options:
+      dns_resolver_options:
         no_default_search_domain: false
       connect_timeout: 0.250s
       type: STRICT_DNS
@@ -2622,13 +2622,13 @@ TEST_F(ClusterManagerImplTest, DefaultSearchDomainWithCustomDnsResolverWithConfi
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(dns_resolver)));
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
   // `true` here means no_default_search_domain is being set via bootstrap config.
-  EXPECT_EQ(true, dns_lookup_options.has_no_default_search_domain());
-  // `false` here means dns_lookup_options.no_default_search_domain is set to false.
-  EXPECT_EQ(false, dns_lookup_options.no_default_search_domain().value());
+  EXPECT_EQ(true, dns_resolver_options.has_no_default_search_domain());
+  // `false` here means dns_resolver_options.no_default_search_domain is set to false.
+  EXPECT_EQ(false, dns_resolver_options.no_default_search_domain().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
@@ -2645,7 +2645,7 @@ TEST_F(ClusterManagerImplTest, NoDefaultSearchDomainWithCustomDnsResolver) {
   static_resources:
     clusters:
     - name: cluster_1
-      dns_lookup_options:
+      dns_resolver_options:
         no_default_search_domain: true
       connect_timeout: 0.250s
       type: STRICT_DNS
@@ -2656,13 +2656,13 @@ TEST_F(ClusterManagerImplTest, NoDefaultSearchDomainWithCustomDnsResolver) {
   )EOF";
 
   std::shared_ptr<Network::MockDnsResolver> dns_resolver(new Network::MockDnsResolver());
-  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(dns_resolver)));
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
   // `true` here means no_default_search_domain is being set via bootstrap config.
-  EXPECT_EQ(true, dns_lookup_options.has_no_default_search_domain());
-  // `true` here means dns_lookup_options.no_default_search_domain is set to true.
-  EXPECT_EQ(true, dns_lookup_options.no_default_search_domain().value());
+  EXPECT_EQ(true, dns_resolver_options.has_no_default_search_domain());
+  // `true` here means dns_resolver_options.no_default_search_domain is set to true.
+  EXPECT_EQ(true, dns_resolver_options.no_default_search_domain().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;

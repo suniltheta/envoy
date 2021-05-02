@@ -452,10 +452,10 @@ message ControlPlane {
   string identifier = 1;
 }
 
-// Configuration of DNS Lookup option flags which control the behavior of the DNS resolver.
-message DnsLookupOptions {
+// Configuration of DNS resolver option flags which control the behavior of the DNS resolver.
+message DnsResolverOptions {
   option (udpa.annotations.versioning).previous_message_type =
-      "envoy.config.core.v3.DnsLookupOptions";
+      "envoy.config.core.v3.DnsResolverOptions";
 
   // Always use TCP queries instead of UDP queries for DNS lookups.
   // This may be overridden on a per-cluster basis in cds_config,

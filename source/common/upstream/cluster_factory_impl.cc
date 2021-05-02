@@ -97,16 +97,16 @@ ClusterFactoryImplBase::selectDnsResolver(const envoy::config::cluster::v3::Clus
       resolvers.push_back(Network::Address::resolveProtoAddress(resolver_addr));
     }
 
-    auto dns_lookup_options =
-        envoy::config::core::v3::DnsLookupOptions(cluster.dns_lookup_options());
+    auto dns_resolver_options =
+        envoy::config::core::v3::DnsResolverOptions(cluster.dns_resolver_options());
     // Field bool `use_tcp_for_dns_lookups` will be deprecated in future. To keep supporting earlier
     // implementation of control plane APIs only accept this value if `use_tcp_for_dns_lookups`
-    // is not set via dns_lookup_options but is set `true` in the field bool
+    // is not set via dns_resolver_options but is set `true` in the field bool
     // `use_tcp_for_dns_lookups`.
-    if (cluster.use_tcp_for_dns_lookups() && !dns_lookup_options.has_use_tcp_for_dns_lookups()) {
-      dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
+    if (cluster.use_tcp_for_dns_lookups() && !dns_resolver_options.has_use_tcp_for_dns_lookups()) {
+      dns_resolver_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
     }
-    return context.dispatcher().createDnsResolver(resolvers, dns_lookup_options);
+    return context.dispatcher().createDnsResolver(resolvers, dns_resolver_options);
   }
 
   return context.dnsResolver();
