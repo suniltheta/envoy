@@ -20,7 +20,6 @@ DnsCacheImpl::DnsCacheImpl(
     const envoy::extensions::common::dynamic_forward_proxy::v3::DnsCacheConfig& config)
     : main_thread_dispatcher_(main_thread_dispatcher),
       dns_lookup_family_(Upstream::getDnsLookupFamilyFromEnum(config.dns_lookup_family())),
-      resolver_(main_thread_dispatcher.createDnsResolver({}, config.dns_lookup_options())),
       tls_slot_(tls), scope_(root_scope.createScope(fmt::format("dns_cache.{}.", config.name()))),
       stats_(generateDnsCacheStats(*scope_)),
       resource_manager_(*scope_, loader, config.name(), config.dns_cache_circuit_breaker()),
@@ -31,6 +30,17 @@ DnsCacheImpl::DnsCacheImpl(
               config, refresh_interval_.count(), random)),
       host_ttl_(PROTOBUF_GET_MS_OR_DEFAULT(config, host_ttl, 300000)),
       max_hosts_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, max_hosts, 1024)) {
+  auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions(config.dns_lookup_options());
+  // Field bool `use_tcp_for_dns_lookups` will be deprecated in future. To keep supporting earlier
+  // implementation of control plane APIs only accept this value if `use_tcp_for_dns_lookups`
+  // is not set via dns_lookup_options but is set `true` in the field bool
+  // `use_tcp_for_dns_lookups`.
+  if (config.use_tcp_for_dns_lookups() && !dns_lookup_options.has_use_tcp_for_dns_lookups()) {
+    dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
+  }
+  dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
+  dns_lookup_options.mutable_no_default_search_domain()->set_value(true);
+  resolver_ = main_thread_dispatcher.createDnsResolver({}, dns_lookup_options);
   tls_slot_.set([&](Event::Dispatcher&) { return std::make_shared<ThreadLocalHostInfo>(*this); });
 }
 

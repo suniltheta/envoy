@@ -348,6 +348,11 @@ protected:
 
   Api::ApiPtr api_;
   Event::DispatcherPtr dispatcher_;
+  envoy::config::core::v3::DnsLookupOptions dns_lookup_options_;
+  void updateDnsLookupOptions() {
+    dns_lookup_options_.mutable_use_tcp_for_dns_lookups()->set_value(false);
+    dns_lookup_options_.mutable_no_default_search_domain()->set_value(false);
+  };
 };
 
 TEST_F(DnsImplConstructor, SupportsCustomResolvers) {
@@ -357,8 +362,8 @@ TEST_F(DnsImplConstructor, SupportsCustomResolvers) {
   auto addr4 = Network::Utility::parseInternetAddressAndPort("127.0.0.1:54");
   char addr6str[INET6_ADDRSTRLEN];
   auto addr6 = Network::Utility::parseInternetAddressAndPort("[::1]:54");
-  auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
-  auto resolver = dispatcher_->createDnsResolver({addr4, addr6}, dns_lookup_options);
+  updateDnsLookupOptions();
+  auto resolver = dispatcher_->createDnsResolver({addr4, addr6}, dns_lookup_options_);
   auto peer = std::make_unique<DnsResolverImplPeer>(dynamic_cast<DnsResolverImpl*>(resolver.get()));
   ares_addr_port_node* resolvers;
   int result = ares_get_servers_ports(peer->channel(), &resolvers);
@@ -409,8 +414,8 @@ private:
 TEST_F(DnsImplConstructor, SupportCustomAddressInstances) {
   auto test_instance(std::make_shared<CustomInstance>("127.0.0.1", 45));
   EXPECT_EQ(test_instance->asString(), "127.0.0.1:borked_port_45");
-  auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
-  auto resolver = dispatcher_->createDnsResolver({test_instance}, dns_lookup_options);
+  updateDnsLookupOptions();
+  auto resolver = dispatcher_->createDnsResolver({test_instance}, dns_lookup_options_);
   auto peer = std::make_unique<DnsResolverImplPeer>(dynamic_cast<DnsResolverImpl*>(resolver.get()));
   ares_addr_port_node* resolvers;
   int result = ares_get_servers_ports(peer->channel(), &resolvers);
@@ -426,8 +431,8 @@ TEST_F(DnsImplConstructor, BadCustomResolvers) {
   envoy::config::core::v3::Address pipe_address;
   pipe_address.mutable_pipe()->set_path("foo");
   auto pipe_instance = Network::Utility::protobufAddressToAddress(pipe_address);
-  auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
-  EXPECT_THROW_WITH_MESSAGE(dispatcher_->createDnsResolver({pipe_instance}, dns_lookup_options),
+  updateDnsLookupOptions();
+  EXPECT_THROW_WITH_MESSAGE(dispatcher_->createDnsResolver({pipe_instance}, dns_lookup_options_),
                             EnvoyException, "DNS resolver 'foo' is not an IP address");
 }
 
@@ -442,12 +447,12 @@ public:
     socket_ = std::make_shared<Network::TcpListenSocket>(
         Network::Test::getCanonicalLoopbackAddress(GetParam()), nullptr, true);
     listener_ = dispatcher_->createListener(socket_, *server_, true, ENVOY_TCP_BACKLOG_SIZE);
-
+    updateDnsLookupOptions();
     if (setResolverInConstructor()) {
       resolver_ = dispatcher_->createDnsResolver({socket_->addressProvider().localAddress()},
-                                                 DnsLookupOptions());
+                                                 dns_lookup_options_);
     } else {
-      resolver_ = dispatcher_->createDnsResolver({}, DnsLookupOptions());
+      resolver_ = dispatcher_->createDnsResolver({}, dns_lookup_options_);
     }
 
     // Point c-ares at the listener with no search domains and TCP-only.
@@ -550,12 +555,10 @@ protected:
   // Should the DnsResolverImpl use a zero timeout for c-ares queries?
   virtual bool zeroTimeout() const { return false; }
   virtual bool tcpOnly() const { return true; }
-  virtual envoy::config::core::v3::DnsLookupOptions DnsLookupOptions() const {
-    auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
-    dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(false);
-    dns_lookup_options.mutable_no_defalt_search_domain()->set_value(false);
-    return dns_lookup_options;
-  };
+  virtual void updateDnsLookupOptions() {
+    dns_lookup_options_.mutable_use_tcp_for_dns_lookups()->set_value(false);
+    dns_lookup_options_.mutable_no_default_search_domain()->set_value(false);
+  }
   virtual bool setResolverInConstructor() const { return false; }
   std::unique_ptr<TestDnsServer> server_;
   std::unique_ptr<DnsResolverImplPeer> peer_;
@@ -564,6 +567,7 @@ protected:
   Api::ApiPtr api_;
   Event::DispatcherPtr dispatcher_;
   DnsResolverSharedPtr resolver_;
+  envoy::config::core::v3::DnsLookupOptions dns_lookup_options_;
 };
 
 // Parameterize the DNS test server socket address.
@@ -884,8 +888,8 @@ TEST_P(DnsImplTest, PendingTimerEnable) {
   Event::MockDispatcher dispatcher;
   Event::MockTimer* timer = new NiceMock<Event::MockTimer>();
   EXPECT_CALL(dispatcher, createTimer_(_)).WillOnce(Return(timer));
-  resolver_ = std::make_shared<DnsResolverImpl>(dispatcher, vec,
-                                                envoy::config::core::v3::DnsLookupOptions());
+  updateDnsLookupOptions();
+  resolver_ = std::make_shared<DnsResolverImpl>(dispatcher, vec, dns_lookup_options_);
   Event::FileEvent* file_event = new NiceMock<Event::MockFileEvent>();
   EXPECT_CALL(dispatcher, createFileEvent_(_, _, _, _)).WillOnce(Return(file_event));
   EXPECT_CALL(*timer, enableTimer(_, _));
@@ -916,12 +920,9 @@ TEST_P(DnsImplZeroTimeoutTest, Timeout) {
 class DnsImplAresFlagsForTcpTest : public DnsImplTest {
 protected:
   bool tcpOnly() const override { return false; }
-  envoy::config::core::v3::DnsLookupOptions DnsLookupOptions() const override {
-    auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
-    dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
-    dns_lookup_options.mutable_no_defalt_search_domain()->set_value(true);
-    return dns_lookup_options;
-  };
+  void updateDnsLookupOptions() override {
+    dns_lookup_options_.mutable_use_tcp_for_dns_lookups()->set_value(true);
+  }
 };
 
 // Parameterize the DNS test server socket address.
@@ -943,9 +944,22 @@ TEST_P(DnsImplAresFlagsForTcpTest, TcpLookupsEnabled) {
   ares_destroy_options(&opts);
 }
 
+class DnsImplAresFlagsForNoDefaultSearchDomainTest : public DnsImplTest {
+protected:
+  bool tcpOnly() const override { return false; }
+  void updateDnsLookupOptions() override {
+    dns_lookup_options_.mutable_no_default_search_domain()->set_value(true);
+  }
+};
+
+// Parameterize the DNS test server socket address.
+INSTANTIATE_TEST_SUITE_P(IpVersions, DnsImplAresFlagsForNoDefaultSearchDomainTest,
+                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                         TestUtility::ipTestParamsToString);
+
 // Validate that c_ares flag `ARES_FLAG_NOSEARCH` is set when boolean property
-// `no_defalt_search_domain` is enabled.
-TEST_P(DnsImplAresFlagsForTcpTest, NoDefaultSearchDomainSet) {
+// `no_default_search_domain` is enabled.
+TEST_P(DnsImplAresFlagsForNoDefaultSearchDomainTest, NoDefaultSearchDomainSet) {
   server_->addCName("root.cnam.domain", "result.cname.domain");
   server_->addHosts("result.cname.domain", {"201.134.56.7"}, RecordType::A);
   ares_options opts{};
@@ -981,9 +995,22 @@ TEST_P(DnsImplAresFlagsForUdpTest, UdpLookupsEnabled) {
   ares_destroy_options(&opts);
 }
 
+class DnsImplAresFlagsForDefaultSearchDomainTest : public DnsImplTest {
+protected:
+  bool tcpOnly() const override { return false; }
+  void updateDnsLookupOptions() override {
+    dns_lookup_options_.mutable_no_default_search_domain()->set_value(false);
+  }
+};
+
+// Parameterize the DNS test server socket address.
+INSTANTIATE_TEST_SUITE_P(IpVersions, DnsImplAresFlagsForDefaultSearchDomainTest,
+                         testing::ValuesIn(TestEnvironment::getIpVersionsForTest()),
+                         TestUtility::ipTestParamsToString);
+
 // Validate that c_ares flag `ARES_FLAG_NOSEARCH` is not set when boolean property
-// `no_defalt_search_domain` is disabled.
-TEST_P(DnsImplAresFlagsForUdpTest, NoDefaultSearchDomainNotSet) {
+// `no_default_search_domain` is disabled.
+TEST_P(DnsImplAresFlagsForDefaultSearchDomainTest, NoDefaultSearchDomainNotSet) {
   server_->addCName("root.cnam.domain", "result.cname.domain");
   server_->addHosts("result.cname.domain", {"201.134.56.7"}, RecordType::A);
   ares_options opts{};
@@ -997,12 +1024,10 @@ TEST_P(DnsImplAresFlagsForUdpTest, NoDefaultSearchDomainNotSet) {
 
 class DnsImplCustomResolverTest : public DnsImplTest {
   bool tcpOnly() const override { return false; }
-  envoy::config::core::v3::DnsLookupOptions DnsLookupOptions() const override {
-    auto dns_lookup_options = envoy::config::core::v3::DnsLookupOptions();
-    dns_lookup_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
-    dns_lookup_options.mutable_no_defalt_search_domain()->set_value(true);
-    return dns_lookup_options;
-  };
+  void updateDnsLookupOptions() override {
+    dns_lookup_options_.mutable_use_tcp_for_dns_lookups()->set_value(true);
+    dns_lookup_options_.mutable_no_default_search_domain()->set_value(false);
+  }
   bool setResolverInConstructor() const override { return true; }
 };
 

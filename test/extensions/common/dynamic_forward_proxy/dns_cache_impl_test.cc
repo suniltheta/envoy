@@ -14,6 +14,7 @@
 #include "test/test_common/test_runtime.h"
 #include "test/test_common/utility.h"
 
+using testing::DoAll;
 using testing::InSequence;
 using testing::Ref;
 using testing::Return;
@@ -721,72 +722,86 @@ TEST_F(DnsCacheImplTest, DnsCacheCircuitBreakersOverflow) {
   EXPECT_EQ(1, TestUtility::findCounter(store_, "dns_cache.foo.dns_rq_pending_overflow")->value());
 }
 
-TEST(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionSet) {
-  NiceMock<Event::MockDispatcher> dispatcher;
-  std::shared_ptr<Network::MockDnsResolver> resolver{std::make_shared<Network::MockDnsResolver>()};
-  NiceMock<ThreadLocal::MockInstance> tls;
-  NiceMock<Random::MockRandomGenerator> random;
-  NiceMock<Runtime::MockLoader> loader;
-  Stats::IsolatedStoreImpl store;
+class DnsCacheImplOptionsTest : public DnsCacheImplTest {
+public:
+  void useTcpForDnsLookupsDeprecatedField() { config_.set_use_tcp_for_dns_lookups(true); }
+  void useTcpForDnsLookups() {
+    config_.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(true);
+  }
+  void useUcpForDnsLookups() {
+    config_.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
+  }
+  void doNotUseDefaultSearchDomain() {
+    config_.mutable_dns_lookup_options()->mutable_no_default_search_domain()->set_value(true);
+  }
+  void useDefaultSearchDomain() {
+    config_.mutable_dns_lookup_options()->mutable_no_default_search_domain()->set_value(false);
+  }
+};
 
-  envoy::extensions::common::dynamic_forward_proxy::v3::DnsCacheConfig config;
-  config.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(true);
-  config.mutable_dns_lookup_options()->mutable_no_defalt_search_domain()->set_value(false);
-
-  EXPECT_CALL(dispatcher, createDnsResolver(_, Ref(config.dns_lookup_options())))
-      .WillOnce(Return(resolver));
-  DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
+TEST_F(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionSetDeprecatedField) {
+  initialize();
+  useTcpForDnsLookupsDeprecatedField();
+  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
+      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(resolver_)));
+  // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config.
+  EXPECT_EQ(true, dns_lookup_options.has_use_tcp_for_dns_lookups());
+  // `true` here means dns_lookup_options.use_tcp_for_dns_lookups is set to true.
+  EXPECT_EQ(true, dns_lookup_options.no_default_search_domain().value());
+  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
-TEST(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionSet) {
-  NiceMock<Event::MockDispatcher> dispatcher;
-  std::shared_ptr<Network::MockDnsResolver> resolver{std::make_shared<Network::MockDnsResolver>()};
-  NiceMock<ThreadLocal::MockInstance> tls;
-  NiceMock<Random::MockRandomGenerator> random;
-  NiceMock<Runtime::MockLoader> loader;
-  Stats::IsolatedStoreImpl store;
-
-  envoy::extensions::common::dynamic_forward_proxy::v3::DnsCacheConfig config;
-  config.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
-  config.mutable_dns_lookup_options()->mutable_no_defalt_search_domain()->set_value(true);
-
-  EXPECT_CALL(dispatcher, createDnsResolver(_, Ref(config.dns_lookup_options())))
-      .WillOnce(Return(resolver));
-  DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
+TEST_F(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionSet) {
+  initialize();
+  useTcpForDnsLookups();
+  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
+      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(resolver_)));
+  // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config.
+  EXPECT_EQ(true, dns_lookup_options.has_use_tcp_for_dns_lookups());
+  // `true` here means dns_lookup_options.use_tcp_for_dns_lookups is set to true.
+  EXPECT_EQ(true, dns_lookup_options.use_tcp_for_dns_lookups().value());
+  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
-TEST(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionUnSet) {
-  NiceMock<Event::MockDispatcher> dispatcher;
-  std::shared_ptr<Network::MockDnsResolver> resolver{std::make_shared<Network::MockDnsResolver>()};
-  NiceMock<ThreadLocal::MockInstance> tls;
-  NiceMock<Random::MockRandomGenerator> random;
-  NiceMock<Runtime::MockLoader> loader;
-  Stats::IsolatedStoreImpl store;
-
-  envoy::extensions::common::dynamic_forward_proxy::v3::DnsCacheConfig config;
-  config.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
-  config.mutable_dns_lookup_options()->mutable_no_defalt_search_domain()->set_value(false);
-
-  EXPECT_CALL(dispatcher, createDnsResolver(_, Ref(config.dns_lookup_options())))
-      .WillOnce(Return(resolver));
-  DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
+TEST_F(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionSet) {
+  initialize();
+  doNotUseDefaultSearchDomain();
+  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
+      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(resolver_)));
+  // `true` here means no_default_search_domain is being set via bootstrap config.
+  EXPECT_EQ(true, dns_lookup_options.has_no_default_search_domain());
+  // `true` here means dns_lookup_options.no_default_search_domain is set to true.
+  EXPECT_EQ(true, dns_lookup_options.no_default_search_domain().value());
+  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
-TEST(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionUnSet) {
-  NiceMock<Event::MockDispatcher> dispatcher;
-  std::shared_ptr<Network::MockDnsResolver> resolver{std::make_shared<Network::MockDnsResolver>()};
-  NiceMock<ThreadLocal::MockInstance> tls;
-  NiceMock<Random::MockRandomGenerator> random;
-  NiceMock<Runtime::MockLoader> loader;
-  Stats::IsolatedStoreImpl store;
+TEST_F(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionUnSet) {
+  initialize();
+  useUcpForDnsLookups();
+  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
+      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(resolver_)));
+  // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config.
+  EXPECT_EQ(true, dns_lookup_options.has_use_tcp_for_dns_lookups());
+  // `false` here means dns_lookup_options.use_tcp_for_dns_lookups is set to false.
+  EXPECT_EQ(false, dns_lookup_options.use_tcp_for_dns_lookups().value());
+  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
+}
 
-  envoy::extensions::common::dynamic_forward_proxy::v3::DnsCacheConfig config;
-  config.mutable_dns_lookup_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
-  config.mutable_dns_lookup_options()->mutable_no_defalt_search_domain()->set_value(false);
-
-  EXPECT_CALL(dispatcher, createDnsResolver(_, Ref(config.dns_lookup_options())))
-      .WillOnce(Return(resolver));
-  DnsCacheImpl dns_cache_(dispatcher, tls, random, loader, store, config);
+TEST_F(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionUnSet) {
+  initialize();
+  useDefaultSearchDomain();
+  envoy::config::core::v3::DnsLookupOptions dns_lookup_options;
+  EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
+      .WillOnce(DoAll(SaveArg<1>(&dns_lookup_options), Return(resolver_)));
+  // `true` here means no_default_search_domain is being set via bootstrap config.
+  EXPECT_EQ(true, dns_lookup_options.has_no_default_search_domain());
+  // `false` here means dns_lookup_options.no_default_search_domain is set to false.
+  EXPECT_EQ(false, dns_lookup_options.no_default_search_domain().value());
+  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
 // DNS cache manager config tests.
