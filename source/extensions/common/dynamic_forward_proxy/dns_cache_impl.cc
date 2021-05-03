@@ -39,8 +39,6 @@ DnsCacheImpl::DnsCacheImpl(
   if (config.use_tcp_for_dns_lookups() && !dns_resolver_options.has_use_tcp_for_dns_lookups()) {
     dns_resolver_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
   }
-  dns_resolver_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
-  dns_resolver_options.mutable_no_default_search_domain()->set_value(true);
   resolver_ = main_thread_dispatcher.createDnsResolver({}, dns_resolver_options);
   tls_slot_.set([&](Event::Dispatcher&) { return std::make_shared<ThreadLocalHostInfo>(*this); });
 }

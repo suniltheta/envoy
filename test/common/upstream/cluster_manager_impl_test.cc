@@ -2421,14 +2421,14 @@ TEST_F(ClusterManagerImplTest, UseUdpWithCustomDnsResolver) {
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
-  // `false` here means use_tcp_for_dns_lookups is not being set via bootstrap config
-  EXPECT_EQ(false, dns_resolver_options.has_use_tcp_for_dns_lookups());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
   EXPECT_CALL(*dns_resolver, resolve(_, _, _))
       .WillRepeatedly(DoAll(SaveArg<2>(&dns_callback), Return(&active_dns_query)));
   create(parseBootstrapFromV3Yaml(yaml));
+  // `false` here means use_tcp_for_dns_lookups is not being set via bootstrap config
+  EXPECT_EQ(false, dns_resolver_options.has_use_tcp_for_dns_lookups());
   factory_.tls_.shutdownThread();
 }
 
@@ -2452,16 +2452,16 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolverViaDeprecatedField) {
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
-  // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config
-  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
-  // `true` here means use_tcp_for_dns_lookups is set to true
-  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
   EXPECT_CALL(*dns_resolver, resolve(_, _, _))
       .WillRepeatedly(DoAll(SaveArg<2>(&dns_callback), Return(&active_dns_query)));
   create(parseBootstrapFromV3Yaml(yaml));
+  // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `true` here means use_tcp_for_dns_lookups is set to true
+  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
   factory_.tls_.shutdownThread();
 }
 
@@ -2488,17 +2488,17 @@ TEST_F(ClusterManagerImplTest, UseUdpWithCustomDnsResolverDeprecatedFieldOverrid
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
-  // `true` here means use_tcp_for_dns_lookups or dns_resolver_options.use_tcp_for_dns_lookups
-  // is being set via bootstrap config.
-  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
-  // `false` here means dns_resolver_options.use_tcp_for_dns_lookups is set to false.
-  EXPECT_EQ(false, dns_resolver_options.use_tcp_for_dns_lookups().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
   EXPECT_CALL(*dns_resolver, resolve(_, _, _))
       .WillRepeatedly(DoAll(SaveArg<2>(&dns_callback), Return(&active_dns_query)));
   create(parseBootstrapFromV3Yaml(yaml));
+  // `true` here means use_tcp_for_dns_lookups or dns_resolver_options.use_tcp_for_dns_lookups
+  // is being set via bootstrap config.
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `false` here means dns_resolver_options.use_tcp_for_dns_lookups is set to false.
+  EXPECT_EQ(false, dns_resolver_options.use_tcp_for_dns_lookups().value());
   factory_.tls_.shutdownThread();
 }
 
@@ -2525,17 +2525,17 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolverDeprecatedFieldOverrid
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
-  // `true` here means use_tcp_for_dns_lookups or dns_resolver_options.use_tcp_for_dns_lookups
-  // is being set via bootstrap config.
-  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
-  // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
-  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
   EXPECT_CALL(*dns_resolver, resolve(_, _, _))
       .WillRepeatedly(DoAll(SaveArg<2>(&dns_callback), Return(&active_dns_query)));
   create(parseBootstrapFromV3Yaml(yaml));
+  // `true` here means use_tcp_for_dns_lookups or dns_resolver_options.use_tcp_for_dns_lookups
+  // is being set via bootstrap config.
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
+  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
   factory_.tls_.shutdownThread();
 }
 
@@ -2560,17 +2560,17 @@ TEST_F(ClusterManagerImplTest, UseTcpWithCustomDnsResolver) {
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
-  // `true` here means use_tcp_for_dns_lookups or dns_resolver_options.use_tcp_for_dns_lookups
-  // is being set via bootstrap config.
-  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
-  // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
-  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
   EXPECT_CALL(*dns_resolver, resolve(_, _, _))
       .WillRepeatedly(DoAll(SaveArg<2>(&dns_callback), Return(&active_dns_query)));
   create(parseBootstrapFromV3Yaml(yaml));
+  // `true` here means use_tcp_for_dns_lookups or dns_resolver_options.use_tcp_for_dns_lookups
+  // is being set via bootstrap config.
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
+  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
   factory_.tls_.shutdownThread();
 }
 
@@ -2593,14 +2593,14 @@ TEST_F(ClusterManagerImplTest, DefaultSearchDomainWithCustomDnsResolver) {
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
-  // `false` here means no_default_search_domain is not being set via bootstrap config
-  EXPECT_EQ(false, dns_resolver_options.has_no_default_search_domain());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
   EXPECT_CALL(*dns_resolver, resolve(_, _, _))
       .WillRepeatedly(DoAll(SaveArg<2>(&dns_callback), Return(&active_dns_query)));
   create(parseBootstrapFromV3Yaml(yaml));
+  // `false` here means no_default_search_domain is not being set via bootstrap config
+  EXPECT_EQ(false, dns_resolver_options.has_no_default_search_domain());
   factory_.tls_.shutdownThread();
 }
 
@@ -2625,16 +2625,16 @@ TEST_F(ClusterManagerImplTest, DefaultSearchDomainWithCustomDnsResolverWithConfi
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
-  // `true` here means no_default_search_domain is being set via bootstrap config.
-  EXPECT_EQ(true, dns_resolver_options.has_no_default_search_domain());
-  // `false` here means dns_resolver_options.no_default_search_domain is set to false.
-  EXPECT_EQ(false, dns_resolver_options.no_default_search_domain().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
   EXPECT_CALL(*dns_resolver, resolve(_, _, _))
       .WillRepeatedly(DoAll(SaveArg<2>(&dns_callback), Return(&active_dns_query)));
   create(parseBootstrapFromV3Yaml(yaml));
+  // `true` here means no_default_search_domain is being set via bootstrap config.
+  EXPECT_EQ(true, dns_resolver_options.has_no_default_search_domain());
+  // `false` here means dns_resolver_options.no_default_search_domain is set to false.
+  EXPECT_EQ(false, dns_resolver_options.no_default_search_domain().value());
   factory_.tls_.shutdownThread();
 }
 
@@ -2659,16 +2659,16 @@ TEST_F(ClusterManagerImplTest, NoDefaultSearchDomainWithCustomDnsResolver) {
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(factory_.dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(dns_resolver)));
-  // `true` here means no_default_search_domain is being set via bootstrap config.
-  EXPECT_EQ(true, dns_resolver_options.has_no_default_search_domain());
-  // `true` here means dns_resolver_options.no_default_search_domain is set to true.
-  EXPECT_EQ(true, dns_resolver_options.no_default_search_domain().value());
 
   Network::DnsResolver::ResolveCb dns_callback;
   Network::MockActiveDnsQuery active_dns_query;
   EXPECT_CALL(*dns_resolver, resolve(_, _, _))
       .WillRepeatedly(DoAll(SaveArg<2>(&dns_callback), Return(&active_dns_query)));
   create(parseBootstrapFromV3Yaml(yaml));
+  // `true` here means no_default_search_domain is being set via bootstrap config.
+  EXPECT_EQ(true, dns_resolver_options.has_no_default_search_domain());
+  // `true` here means dns_resolver_options.no_default_search_domain is set to true.
+  EXPECT_EQ(true, dns_resolver_options.no_default_search_domain().value());
   factory_.tls_.shutdownThread();
 }
 

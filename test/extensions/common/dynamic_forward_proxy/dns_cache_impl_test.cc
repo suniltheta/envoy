@@ -722,86 +722,69 @@ TEST_F(DnsCacheImplTest, DnsCacheCircuitBreakersOverflow) {
   EXPECT_EQ(1, TestUtility::findCounter(store_, "dns_cache.foo.dns_rq_pending_overflow")->value());
 }
 
-class DnsCacheImplOptionsTest : public DnsCacheImplTest {
-public:
-  void useTcpForDnsLookupsDeprecatedField() { config_.set_use_tcp_for_dns_lookups(true); }
-  void useTcpForDnsLookups() {
-    config_.mutable_dns_resolver_options()->mutable_use_tcp_for_dns_lookups()->set_value(true);
-  }
-  void useUcpForDnsLookups() {
-    config_.mutable_dns_resolver_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
-  }
-  void doNotUseDefaultSearchDomain() {
-    config_.mutable_dns_resolver_options()->mutable_no_default_search_domain()->set_value(true);
-  }
-  void useDefaultSearchDomain() {
-    config_.mutable_dns_resolver_options()->mutable_no_default_search_domain()->set_value(false);
-  }
-};
-
-TEST_F(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionSetDeprecatedField) {
+TEST_F(DnsCacheImplTest, UseTcpForDnsLookupsOptionSetDeprecatedField) {
   initialize();
-  useTcpForDnsLookupsDeprecatedField();
+  config_.set_use_tcp_for_dns_lookups(true);
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
-  // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config.
-  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
-  // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
-  EXPECT_EQ(true, dns_resolver_options.no_default_search_domain().value());
   DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
-}
-
-TEST_F(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionSet) {
-  initialize();
-  useTcpForDnsLookups();
-  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
-  EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
   // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config.
   EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
   // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
   EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
-  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
-TEST_F(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionSet) {
+TEST_F(DnsCacheImplTest, UseTcpForDnsLookupsOptionSet) {
   initialize();
-  doNotUseDefaultSearchDomain();
+  config_.mutable_dns_resolver_options()->mutable_use_tcp_for_dns_lookups()->set_value(true);
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
+  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
+  // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config.
+  EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
+  // `true` here means dns_resolver_options.use_tcp_for_dns_lookups is set to true.
+  EXPECT_EQ(true, dns_resolver_options.use_tcp_for_dns_lookups().value());
+}
+
+TEST_F(DnsCacheImplTest, NoDefaultSearchDomainOptionSet) {
+  initialize();
+  config_.mutable_dns_resolver_options()->mutable_no_default_search_domain()->set_value(true);
+  envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
+  EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
+      .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
+  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
   // `true` here means no_default_search_domain is being set via bootstrap config.
   EXPECT_EQ(true, dns_resolver_options.has_no_default_search_domain());
   // `true` here means dns_resolver_options.no_default_search_domain is set to true.
   EXPECT_EQ(true, dns_resolver_options.no_default_search_domain().value());
-  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
-TEST_F(DnsCacheImplOptionsTest, UseTcpForDnsLookupsOptionUnSet) {
+TEST_F(DnsCacheImplTest, UseTcpForDnsLookupsOptionUnSet) {
   initialize();
-  useUcpForDnsLookups();
+  config_.mutable_dns_resolver_options()->mutable_use_tcp_for_dns_lookups()->set_value(false);
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
+  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
   // `true` here means use_tcp_for_dns_lookups is being set via bootstrap config.
   EXPECT_EQ(true, dns_resolver_options.has_use_tcp_for_dns_lookups());
   // `false` here means dns_resolver_options.use_tcp_for_dns_lookups is set to false.
   EXPECT_EQ(false, dns_resolver_options.use_tcp_for_dns_lookups().value());
-  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
-TEST_F(DnsCacheImplOptionsTest, NoDefaultSearchDomainOptionUnSet) {
+TEST_F(DnsCacheImplTest, NoDefaultSearchDomainOptionUnSet) {
   initialize();
-  useDefaultSearchDomain();
+  config_.mutable_dns_resolver_options()->mutable_no_default_search_domain()->set_value(false);
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options;
   EXPECT_CALL(dispatcher_, createDnsResolver(_, _))
       .WillOnce(DoAll(SaveArg<1>(&dns_resolver_options), Return(resolver_)));
+  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
   // `true` here means no_default_search_domain is being set via bootstrap config.
   EXPECT_EQ(true, dns_resolver_options.has_no_default_search_domain());
   // `false` here means dns_resolver_options.no_default_search_domain is set to false.
   EXPECT_EQ(false, dns_resolver_options.no_default_search_domain().value());
-  DnsCacheImpl dns_cache_(dispatcher_, tls_, random_, loader_, store_, config_);
 }
 
 // DNS cache manager config tests.
