@@ -933,14 +933,14 @@ INSTANTIATE_TEST_SUITE_P(IpVersions, DnsImplAresFlagsForTcpTest,
 // Validate that c_ares flag `ARES_FLAG_USEVC` is set when boolean property
 // `use_tcp_for_dns_lookups` is enabled.
 TEST_P(DnsImplAresFlagsForTcpTest, TcpLookupsEnabled) {
-  server_->addCName("root.cnam.domain", "result.cname.domain");
+  server_->addCName("root.cname.domain", "result.cname.domain");
   server_->addHosts("result.cname.domain", {"201.134.56.7"}, RecordType::A);
   ares_options opts{};
   int optmask = 0;
   EXPECT_EQ(ARES_SUCCESS, ares_save_options(peer_->channel(), &opts, &optmask));
   EXPECT_TRUE((opts.flags & ARES_FLAG_USEVC) == ARES_FLAG_USEVC);
   EXPECT_NE(nullptr,
-            resolveWithUnreferencedParameters("root.cnam.domain", DnsLookupFamily::Auto, true));
+            resolveWithUnreferencedParameters("root.cname.domain", DnsLookupFamily::Auto, true));
   ares_destroy_options(&opts);
 }
 
@@ -960,14 +960,14 @@ INSTANTIATE_TEST_SUITE_P(IpVersions, DnsImplAresFlagsForNoDefaultSearchDomainTes
 // Validate that c_ares flag `ARES_FLAG_NOSEARCH` is set when boolean property
 // `no_default_search_domain` is enabled.
 TEST_P(DnsImplAresFlagsForNoDefaultSearchDomainTest, NoDefaultSearchDomainSet) {
-  server_->addCName("root.cnam.domain", "result.cname.domain");
+  server_->addCName("root.cname.domain", "result.cname.domain");
   server_->addHosts("result.cname.domain", {"201.134.56.7"}, RecordType::A);
   ares_options opts{};
   int optmask = 0;
   EXPECT_EQ(ARES_SUCCESS, ares_save_options(peer_->channel(), &opts, &optmask));
   EXPECT_TRUE((opts.flags & ARES_FLAG_NOSEARCH) == ARES_FLAG_NOSEARCH);
   EXPECT_NE(nullptr,
-            resolveWithUnreferencedParameters("root.cnam.domain", DnsLookupFamily::Auto, true));
+            resolveWithUnreferencedParameters("root.cname.domain", DnsLookupFamily::Auto, true));
   ares_destroy_options(&opts);
 }
 
@@ -984,14 +984,14 @@ INSTANTIATE_TEST_SUITE_P(IpVersions, DnsImplAresFlagsForUdpTest,
 // Validate that c_ares flag `ARES_FLAG_USEVC` is not set when boolean property
 // `use_tcp_for_dns_lookups` is disabled.
 TEST_P(DnsImplAresFlagsForUdpTest, UdpLookupsEnabled) {
-  server_->addCName("root.cnam.domain", "result.cname.domain");
+  server_->addCName("root.cname.domain", "result.cname.domain");
   server_->addHosts("result.cname.domain", {"201.134.56.7"}, RecordType::A);
   ares_options opts{};
   int optmask = 0;
   EXPECT_EQ(ARES_SUCCESS, ares_save_options(peer_->channel(), &opts, &optmask));
   EXPECT_FALSE((opts.flags & ARES_FLAG_USEVC) == ARES_FLAG_USEVC);
   EXPECT_NE(nullptr,
-            resolveWithUnreferencedParameters("root.cnam.domain", DnsLookupFamily::Auto, true));
+            resolveWithUnreferencedParameters("root.cname.domain", DnsLookupFamily::Auto, true));
   ares_destroy_options(&opts);
 }
 
@@ -1011,14 +1011,14 @@ INSTANTIATE_TEST_SUITE_P(IpVersions, DnsImplAresFlagsForDefaultSearchDomainTest,
 // Validate that c_ares flag `ARES_FLAG_NOSEARCH` is not set when boolean property
 // `no_default_search_domain` is disabled.
 TEST_P(DnsImplAresFlagsForDefaultSearchDomainTest, NoDefaultSearchDomainNotSet) {
-  server_->addCName("root.cnam.domain", "result.cname.domain");
+  server_->addCName("root.cname.domain", "result.cname.domain");
   server_->addHosts("result.cname.domain", {"201.134.56.7"}, RecordType::A);
   ares_options opts{};
   int optmask = 0;
   EXPECT_EQ(ARES_SUCCESS, ares_save_options(peer_->channel(), &opts, &optmask));
   EXPECT_FALSE((opts.flags & ARES_FLAG_NOSEARCH) == ARES_FLAG_NOSEARCH);
   EXPECT_NE(nullptr,
-            resolveWithUnreferencedParameters("root.cnam.domain", DnsLookupFamily::Auto, true));
+            resolveWithUnreferencedParameters("root.cname.domain", DnsLookupFamily::Auto, true));
   ares_destroy_options(&opts);
 }
 
