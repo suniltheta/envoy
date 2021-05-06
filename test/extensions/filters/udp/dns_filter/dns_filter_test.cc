@@ -2093,9 +2093,9 @@ TEST_F(DnsFilterTest, DnsResolverOptionsNotSet) {
   std::string config_to_use = fmt::format(dns_resolver_options_config_not_set, temp_path);
   setup(config_to_use);
   // `false` here means use_tcp_for_dns_lookups is not set via dns filter config
-  EXPECT_EQ(false, dns_resolver_options_.has_use_tcp_for_dns_lookups());
+  EXPECT_EQ(false, dns_resolver_options_.use_tcp_for_dns_lookups());
   // `false` here means no_default_search_domain is not set via dns filter config
-  EXPECT_EQ(false, dns_resolver_options_.has_no_default_search_domain());
+  EXPECT_EQ(false, dns_resolver_options_.no_default_search_domain());
 }
 
 TEST_F(DnsFilterTest, DnsResolverOptionsSetTrue) {
@@ -2106,14 +2106,10 @@ TEST_F(DnsFilterTest, DnsResolverOptionsSetTrue) {
   std::string config_to_use = fmt::format(dns_resolver_options_config_set_true, temp_path);
   setup(config_to_use);
 
-  // `true` here means use_tcp_for_dns_lookups is set via dns filter config
-  EXPECT_EQ(true, dns_resolver_options_.has_use_tcp_for_dns_lookups());
-  // `true` here means no_default_search_domain is set via dns filter config
-  EXPECT_EQ(true, dns_resolver_options_.has_no_default_search_domain());
   // `true` here means use_tcp_for_dns_lookups is set true
-  EXPECT_EQ(true, dns_resolver_options_.use_tcp_for_dns_lookups().value());
+  EXPECT_EQ(true, dns_resolver_options_.use_tcp_for_dns_lookups());
   // `true` here means no_default_search_domain is set true
-  EXPECT_EQ(true, dns_resolver_options_.no_default_search_domain().value());
+  EXPECT_EQ(true, dns_resolver_options_.no_default_search_domain());
 }
 
 TEST_F(DnsFilterTest, DnsResolverOptionsSetFalse) {
@@ -2124,14 +2120,10 @@ TEST_F(DnsFilterTest, DnsResolverOptionsSetFalse) {
   std::string config_to_use = fmt::format(dns_resolver_options_config_set_false, temp_path);
   setup(config_to_use);
 
-  // `true` here means use_tcp_for_dns_lookups is set via dns filter config
-  EXPECT_EQ(true, dns_resolver_options_.has_use_tcp_for_dns_lookups());
-  // `true` here means no_default_search_domain is set via dns filter config
-  EXPECT_EQ(true, dns_resolver_options_.has_no_default_search_domain());
   // `false` here means use_tcp_for_dns_lookups is set true
-  EXPECT_EQ(false, dns_resolver_options_.use_tcp_for_dns_lookups().value());
+  EXPECT_EQ(false, dns_resolver_options_.use_tcp_for_dns_lookups());
   // `false` here means no_default_search_domain is set true
-  EXPECT_EQ(false, dns_resolver_options_.no_default_search_domain().value());
+  EXPECT_EQ(false, dns_resolver_options_.no_default_search_domain());
 }
 
 } // namespace

@@ -537,12 +537,10 @@ void InstanceImpl::initialize(const Options& options,
 
   auto dns_resolver_options =
       envoy::config::core::v3::DnsResolverOptions(bootstrap_.dns_resolver_options());
-  // Field bool `use_tcp_for_dns_lookups` will be deprecated in future. To keep supporting earlier
-  // implementation of control plane APIs only accept this value if `use_tcp_for_dns_lookups`
-  // is not set via dns_resolver_options but is set `true` in the field bool
-  // `use_tcp_for_dns_lookups`.
-  if (bootstrap_.use_tcp_for_dns_lookups() && !dns_resolver_options.has_use_tcp_for_dns_lookups()) {
-    dns_resolver_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
+  // Field bool `use_tcp_for_dns_lookups` will be deprecated in future. To be backward compatible
+  // utilize bootstrap_.use_tcp_for_dns_lookups() if `dns_resolver_options` is not set.
+  if (!bootstrap_.has_dns_resolver_options()) {
+    dns_resolver_options.set_use_tcp_for_dns_lookups(bootstrap_.use_tcp_for_dns_lookups());
   }
   dns_resolver_ = dispatcher_->createDnsResolver({}, dns_resolver_options);
 

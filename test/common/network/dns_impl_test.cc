@@ -349,10 +349,6 @@ protected:
   Api::ApiPtr api_;
   Event::DispatcherPtr dispatcher_;
   envoy::config::core::v3::DnsResolverOptions dns_resolver_options_;
-  void updateDnsResolverOptions() {
-    dns_resolver_options_.mutable_use_tcp_for_dns_lookups()->set_value(false);
-    dns_resolver_options_.mutable_no_default_search_domain()->set_value(false);
-  };
 };
 
 TEST_F(DnsImplConstructor, SupportsCustomResolvers) {
@@ -362,7 +358,6 @@ TEST_F(DnsImplConstructor, SupportsCustomResolvers) {
   auto addr4 = Network::Utility::parseInternetAddressAndPort("127.0.0.1:54");
   char addr6str[INET6_ADDRSTRLEN];
   auto addr6 = Network::Utility::parseInternetAddressAndPort("[::1]:54");
-  updateDnsResolverOptions();
   auto resolver = dispatcher_->createDnsResolver({addr4, addr6}, dns_resolver_options_);
   auto peer = std::make_unique<DnsResolverImplPeer>(dynamic_cast<DnsResolverImpl*>(resolver.get()));
   ares_addr_port_node* resolvers;
@@ -414,7 +409,6 @@ private:
 TEST_F(DnsImplConstructor, SupportCustomAddressInstances) {
   auto test_instance(std::make_shared<CustomInstance>("127.0.0.1", 45));
   EXPECT_EQ(test_instance->asString(), "127.0.0.1:borked_port_45");
-  updateDnsResolverOptions();
   auto resolver = dispatcher_->createDnsResolver({test_instance}, dns_resolver_options_);
   auto peer = std::make_unique<DnsResolverImplPeer>(dynamic_cast<DnsResolverImpl*>(resolver.get()));
   ares_addr_port_node* resolvers;
@@ -431,7 +425,6 @@ TEST_F(DnsImplConstructor, BadCustomResolvers) {
   envoy::config::core::v3::Address pipe_address;
   pipe_address.mutable_pipe()->set_path("foo");
   auto pipe_instance = Network::Utility::protobufAddressToAddress(pipe_address);
-  updateDnsResolverOptions();
   EXPECT_THROW_WITH_MESSAGE(dispatcher_->createDnsResolver({pipe_instance}, dns_resolver_options_),
                             EnvoyException, "DNS resolver 'foo' is not an IP address");
 }
@@ -555,10 +548,7 @@ protected:
   // Should the DnsResolverImpl use a zero timeout for c-ares queries?
   virtual bool zeroTimeout() const { return false; }
   virtual bool tcpOnly() const { return true; }
-  virtual void updateDnsResolverOptions() {
-    dns_resolver_options_.mutable_use_tcp_for_dns_lookups()->set_value(false);
-    dns_resolver_options_.mutable_no_default_search_domain()->set_value(false);
-  }
+  virtual void updateDnsResolverOptions(){};
   virtual bool setResolverInConstructor() const { return false; }
   std::unique_ptr<TestDnsServer> server_;
   std::unique_ptr<DnsResolverImplPeer> peer_;
@@ -888,7 +878,6 @@ TEST_P(DnsImplTest, PendingTimerEnable) {
   Event::MockDispatcher dispatcher;
   Event::MockTimer* timer = new NiceMock<Event::MockTimer>();
   EXPECT_CALL(dispatcher, createTimer_(_)).WillOnce(Return(timer));
-  updateDnsResolverOptions();
   resolver_ = std::make_shared<DnsResolverImpl>(dispatcher, vec, dns_resolver_options_);
   Event::FileEvent* file_event = new NiceMock<Event::MockFileEvent>();
   EXPECT_CALL(dispatcher, createFileEvent_(_, _, _, _)).WillOnce(Return(file_event));
@@ -921,7 +910,7 @@ class DnsImplAresFlagsForTcpTest : public DnsImplTest {
 protected:
   bool tcpOnly() const override { return false; }
   void updateDnsResolverOptions() override {
-    dns_resolver_options_.mutable_use_tcp_for_dns_lookups()->set_value(true);
+    dns_resolver_options_.set_use_tcp_for_dns_lookups(true);
   }
 };
 
@@ -948,7 +937,7 @@ class DnsImplAresFlagsForNoDefaultSearchDomainTest : public DnsImplTest {
 protected:
   bool tcpOnly() const override { return false; }
   void updateDnsResolverOptions() override {
-    dns_resolver_options_.mutable_no_default_search_domain()->set_value(true);
+    dns_resolver_options_.set_no_default_search_domain(true);
   }
 };
 
@@ -998,9 +987,7 @@ TEST_P(DnsImplAresFlagsForUdpTest, UdpLookupsEnabled) {
 class DnsImplAresFlagsForDefaultSearchDomainTest : public DnsImplTest {
 protected:
   bool tcpOnly() const override { return false; }
-  void updateDnsResolverOptions() override {
-    dns_resolver_options_.mutable_no_default_search_domain()->set_value(false);
-  }
+  void updateDnsResolverOptions() override {}
 };
 
 // Parameterize the DNS test server socket address.
@@ -1025,8 +1012,7 @@ TEST_P(DnsImplAresFlagsForDefaultSearchDomainTest, NoDefaultSearchDomainNotSet) 
 class DnsImplCustomResolverTest : public DnsImplTest {
   bool tcpOnly() const override { return false; }
   void updateDnsResolverOptions() override {
-    dns_resolver_options_.mutable_use_tcp_for_dns_lookups()->set_value(true);
-    dns_resolver_options_.mutable_no_default_search_domain()->set_value(false);
+    dns_resolver_options_.set_use_tcp_for_dns_lookups(true);
   }
   bool setResolverInConstructor() const override { return true; }
 };

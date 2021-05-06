@@ -66,12 +66,12 @@ absl::optional<std::string> DnsResolverImpl::maybeBuildResolversCsv(
 DnsResolverImpl::AresOptions DnsResolverImpl::defaultAresOptions() {
   AresOptions options{};
 
-  if (dns_resolver_options_.use_tcp_for_dns_lookups().value()) {
+  if (dns_resolver_options_.use_tcp_for_dns_lookups()) {
     options.optmask_ |= ARES_OPT_FLAGS;
     options.options_.flags |= ARES_FLAG_USEVC;
   }
 
-  if (dns_resolver_options_.no_default_search_domain().value()) {
+  if (dns_resolver_options_.no_default_search_domain()) {
     options.optmask_ |= ARES_OPT_FLAGS;
     options.options_.flags |= ARES_FLAG_NOSEARCH;
   }

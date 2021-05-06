@@ -32,12 +32,10 @@ DnsCacheImpl::DnsCacheImpl(
       max_hosts_(PROTOBUF_GET_WRAPPED_OR_DEFAULT(config, max_hosts, 1024)) {
   auto dns_resolver_options =
       envoy::config::core::v3::DnsResolverOptions(config.dns_resolver_options());
-  // Field bool `use_tcp_for_dns_lookups` will be deprecated in future. To keep supporting earlier
-  // implementation of control plane APIs only accept this value if `use_tcp_for_dns_lookups`
-  // is not set via dns_resolver_options but is set `true` in the field bool
-  // `use_tcp_for_dns_lookups`.
-  if (config.use_tcp_for_dns_lookups() && !dns_resolver_options.has_use_tcp_for_dns_lookups()) {
-    dns_resolver_options.mutable_use_tcp_for_dns_lookups()->set_value(true);
+  // Field bool `use_tcp_for_dns_lookups` will be deprecated in future. To be backward compatible
+  // utilize config.use_tcp_for_dns_lookups() if `dns_resolver_options` is not set.
+  if (!config.has_dns_resolver_options()) {
+    dns_resolver_options.set_use_tcp_for_dns_lookups(config.use_tcp_for_dns_lookups());
   }
   resolver_ = main_thread_dispatcher.createDnsResolver({}, dns_resolver_options);
   tls_slot_.set([&](Event::Dispatcher&) { return std::make_shared<ThreadLocalHostInfo>(*this); });
