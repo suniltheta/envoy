@@ -224,7 +224,6 @@ message Bootstrap {
 
   // Configuration of DNS resolver option flags which control the behavior of the DNS resolver.
   // This may be overridden on a per-cluster basis in cds_config,
-
   // when :ref:`dns_resolvers <envoy_api_field_config.cluster.v4alpha.Cluster.dns_resolvers>` and
   // :ref:`dns_resolver_options <envoy_api_field_config.cluster.v4alpha.Cluster.dns_resolver_options>`
   // are specified.
