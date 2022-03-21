@@ -3,8 +3,11 @@
 #include "envoy/common/exception.h"
 
 #include "source/common/common/lock_guard.h"
+#include "source/common/http/message_impl.h"
 #include "source/common/http/utility.h"
 #include "source/common/json/json_loader.h"
+
+#include "source/extensions/common/aws/utility.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -71,8 +74,12 @@ void InstanceProfileCredentialsProvider::refresh() {
   ENVOY_LOG(debug, "Getting AWS credentials from the instance metadata");
 
   // First discover the Role of this instance
-  const auto instance_role_string =
-      metadata_fetcher_(EC2_METADATA_HOST, SECURITY_CREDENTIALS_PATH, "");
+  Http::RequestMessageImpl message;
+  message.headers().setScheme(Http::Headers::get().SchemeValues.Http);
+  message.headers().setMethod(Http::Headers::get().MethodValues.Get);
+  message.headers().setHost(EC2_METADATA_HOST);
+  message.headers().setPath(SECURITY_CREDENTIALS_PATH);
+  const auto instance_role_string = metadata_fetcher_(message);
   if (!instance_role_string) {
     ENVOY_LOG(error, "Could not retrieve credentials listing from the instance metadata");
     return;
@@ -94,7 +101,8 @@ void InstanceProfileCredentialsProvider::refresh() {
   ENVOY_LOG(debug, "AWS credentials path: {}", credential_path);
 
   // Then fetch and parse the credentials
-  const auto credential_document = metadata_fetcher_(EC2_METADATA_HOST, credential_path, "");
+  message.headers().setPath(credential_path);
+  const auto credential_document = metadata_fetcher_(message);
   if (!credential_document) {
     ENVOY_LOG(error, "Could not load AWS credentials document from the instance metadata");
     return;
@@ -133,9 +141,14 @@ void TaskRoleCredentialsProvider::refresh() {
   absl::string_view host;
   absl::string_view path;
   Http::Utility::extractHostPathFromUri(credential_uri_, host, path);
-  const auto credential_document =
-      metadata_fetcher_(std::string(host.data(), host.size()),
-                        std::string(path.data(), path.size()), authorization_token_);
+
+  Http::RequestMessageImpl message;
+  message.headers().setScheme(Http::Headers::get().SchemeValues.Http);
+  message.headers().setMethod(Http::Headers::get().MethodValues.Get);
+  message.headers().setHost(host);
+  message.headers().setPath(path);
+  message.headers().setCopy(Http::CustomHeaders::get().Authorization, authorization_token_);
+  const auto credential_document = metadata_fetcher_(message);
   if (!credential_document) {
     ENVOY_LOG(error, "Could not load AWS credentials document from the task role");
     return;
