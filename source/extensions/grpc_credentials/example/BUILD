@@ -24,6 +24,7 @@ envoy_cc_library(
     deps = [
         "//envoy/grpc:google_grpc_creds_interface",
         "//envoy/registry",
+        "//envoy/upstream:cluster_manager_interface",
         "//source/common/common:assert_lib",
         "//source/common/grpc:google_grpc_creds_lib",
         "@envoy_api//envoy/config/core/v3:pkg_cc_proto",
