@@ -3,6 +3,7 @@
 #include "envoy/api/api.h"
 #include "envoy/common/platform.h"
 #include "envoy/config/core/v3/grpc_service.pb.h"
+#include "envoy/upstream/cluster_manager.h"
 
 #include "grpcpp/grpcpp.h"
 
@@ -14,7 +15,7 @@ grpc::SslCredentialsOptions buildSslOptionsFromConfig(
 
 std::shared_ptr<grpc::ChannelCredentials>
 getGoogleGrpcChannelCredentials(const envoy::config::core::v3::GrpcService& grpc_service,
-                                Api::Api& api);
+                                Api::Api& api, Upstream::ClusterManager& cm);
 
 class CredsUtility {
 public:
