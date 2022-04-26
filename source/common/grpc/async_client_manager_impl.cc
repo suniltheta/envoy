@@ -71,10 +71,11 @@ RawAsyncClientPtr AsyncClientFactoryImpl::createUncachedRawAsyncClient() {
 
 GoogleAsyncClientFactoryImpl::GoogleAsyncClientFactoryImpl(
     ThreadLocal::Instance& tls, ThreadLocal::Slot* google_tls_slot, Stats::Scope& scope,
-    const envoy::config::core::v3::GrpcService& config, Api::Api& api, const StatNames& stat_names)
+    const envoy::config::core::v3::GrpcService& config, Api::Api& api, Upstream::ClusterManager& cm,
+    const StatNames& stat_names)
     : tls_(tls), google_tls_slot_(google_tls_slot),
       scope_(scope.createScope(fmt::format("grpc.{}.", config.google_grpc().stat_prefix()))),
-      config_(config), api_(api), stat_names_(stat_names) {
+      config_(config), api_(api), cm_(cm), stat_names_(stat_names) {
 
 #ifndef ENVOY_GOOGLE_GRPC
   UNREFERENCED_PARAMETER(tls_);
@@ -112,7 +113,7 @@ RawAsyncClientPtr GoogleAsyncClientFactoryImpl::createUncachedRawAsyncClient() {
   GoogleGenericStubFactory stub_factory;
   return std::make_unique<GoogleAsyncClientImpl>(
       tls_.dispatcher(), google_tls_slot_->getTyped<GoogleAsyncClientThreadLocal>(), stub_factory,
-      scope_, config_, api_, stat_names_);
+      scope_, config_, api_, cm_, stat_names_);
 #else
   return nullptr;
 #endif
@@ -126,7 +127,7 @@ AsyncClientManagerImpl::factoryForGrpcService(const envoy::config::core::v3::Grp
     return std::make_unique<AsyncClientFactoryImpl>(cm_, config, skip_cluster_check, time_source_);
   case envoy::config::core::v3::GrpcService::TargetSpecifierCase::kGoogleGrpc:
     return std::make_unique<GoogleAsyncClientFactoryImpl>(tls_, google_tls_slot_.get(), scope,
-                                                          config, api_, stat_names_);
+                                                          config, api_, cm_, stat_names_);
   case envoy::config::core::v3::GrpcService::TargetSpecifierCase::TARGET_SPECIFIER_NOT_SET:
     PANIC_DUE_TO_PROTO_UNSET;
   }
