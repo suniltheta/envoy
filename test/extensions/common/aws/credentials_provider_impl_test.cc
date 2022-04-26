@@ -1,3 +1,5 @@
+#include <cstddef>
+
 #include "source/extensions/common/aws/credentials_provider_impl.h"
 
 #include "test/extensions/common/aws/mocks.h"
@@ -100,9 +102,10 @@ class InstanceProfileCredentialsProviderTest : public testing::Test {
 public:
   InstanceProfileCredentialsProviderTest()
       : api_(Api::createApiForTest(time_system_)),
-        provider_(*api_, [this](Http::RequestMessage& message) -> absl::optional<std::string> {
-          return this->fetch_metadata_.fetch(message);
-        }) {}
+        provider_(*api_, cluster_manager_,
+                  [this](Http::RequestMessage& message) -> absl::optional<std::string> {
+                    return this->fetch_metadata_.fetch(message);
+                  }) {}
 
   void expectSessionToken(const absl::optional<std::string>& token) {
     Http::TestRequestHeaderMapImpl headers{{":path", "/latest/api/token"},
@@ -147,6 +150,7 @@ public:
   Event::SimulatedTimeSystem time_system_;
   Api::ApiPtr api_;
   NiceMock<MockFetchMetadata> fetch_metadata_;
+  NiceMock<Upstream::MockClusterManager> cluster_manager_;
   InstanceProfileCredentialsProvider provider_;
 };
 
@@ -369,13 +373,14 @@ public:
   TaskRoleCredentialsProviderTest()
       : api_(Api::createApiForTest(time_system_)),
         provider_(
-            *api_,
+            *api_, cluster_manager_,
             [this](Http::RequestMessage& message) -> absl::optional<std::string> {
               return this->fetch_metadata_.fetch(message);
             },
             "169.254.170.2:80/path/to/doc", "auth_token") {
     // Tue Jan  2 03:04:05 UTC 2018
     time_system_.setSystemTime(std::chrono::milliseconds(1514862245000));
+    // cluster_manager_.initializeThreadLocalClusters({"task_metadata_server_internal"});
   }
 
   void expectDocument(const absl::optional<std::string>& document) {
@@ -389,6 +394,7 @@ public:
   Event::SimulatedTimeSystem time_system_;
   Api::ApiPtr api_;
   NiceMock<MockFetchMetadata> fetch_metadata_;
+  NiceMock<Upstream::MockClusterManager> cluster_manager_;
   TaskRoleCredentialsProvider provider_;
 };
 
@@ -504,6 +510,9 @@ TEST_F(TaskRoleCredentialsProviderTest, TimestampCredentialExpiration) {
 class DefaultCredentialsProviderChainTest : public testing::Test {
 public:
   DefaultCredentialsProviderChainTest() : api_(Api::createApiForTest(time_system_)) {
+    // cluster_manager_.initializeThreadLocalClusters({"pubkey_cluster"});
+    cluster_manager_.initializeThreadLocalClusters(
+        {"credentials_provider_cluster"}); // TODO (suniltheta) See where to init this cluster
     EXPECT_CALL(factories_, createEnvironmentCredentialsProvider());
   }
 
@@ -518,56 +527,71 @@ public:
   public:
     MOCK_METHOD(CredentialsProviderSharedPtr, createEnvironmentCredentialsProvider, (), (const));
     MOCK_METHOD(CredentialsProviderSharedPtr, createTaskRoleCredentialsProvider,
-                (Api::Api&, const MetadataCredentialsProviderBase::MetadataFetcher&,
-                 absl::string_view, absl::string_view),
+                (Api::Api&, Upstream::ClusterManager&,
+                 const MetadataCredentialsProviderBase::MetadataFetcher&, absl::string_view,
+                 absl::string_view),
                 (const));
     MOCK_METHOD(CredentialsProviderSharedPtr, createInstanceProfileCredentialsProvider,
-                (Api::Api&, const MetadataCredentialsProviderBase::MetadataFetcher& fetcher),
+                (Api::Api&, Upstream::ClusterManager&,
+                 const MetadataCredentialsProviderBase::MetadataFetcher& fetcher),
                 (const));
   };
 
   Event::SimulatedTimeSystem time_system_;
   Api::ApiPtr api_;
+  NiceMock<Upstream::MockClusterManager> cluster_manager_;
   NiceMock<MockCredentialsProviderChainFactories> factories_;
 };
 
 TEST_F(DefaultCredentialsProviderChainTest, NoEnvironmentVars) {
-  EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _));
-  DefaultCredentialsProviderChain chain(*api_, DummyMetadataFetcher(), factories_);
+  EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _));
+  MockUpstream mock_creds_provider(cluster_manager_, "");
+  DefaultCredentialsProviderChain chain(*api_, cluster_manager_, DummyMetadataFetcher(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, MetadataDisabled) {
   TestEnvironment::setEnvVar("AWS_EC2_METADATA_DISABLED", "true", 1);
-  EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _)).Times(0);
-  DefaultCredentialsProviderChain chain(*api_, DummyMetadataFetcher(), factories_);
+  EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _)).Times(0);
+  MockUpstream mock_creds_provider(cluster_manager_, "");
+  DefaultCredentialsProviderChain chain(*api_, cluster_manager_, DummyMetadataFetcher(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, MetadataNotDisabled) {
   TestEnvironment::setEnvVar("AWS_EC2_METADATA_DISABLED", "false", 1);
-  EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _));
-  DefaultCredentialsProviderChain chain(*api_, DummyMetadataFetcher(), factories_);
+  EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _));
+  MockUpstream mock_creds_provider(cluster_manager_, "");
+  DefaultCredentialsProviderChain chain(*api_, cluster_manager_, DummyMetadataFetcher(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, RelativeUri) {
   TestEnvironment::setEnvVar("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI", "/path/to/creds", 1);
-  EXPECT_CALL(factories_, createTaskRoleCredentialsProvider(Ref(*api_), _,
+  EXPECT_CALL(factories_, createTaskRoleCredentialsProvider(Ref(*api_), _, _,
                                                             "169.254.170.2:80/path/to/creds", ""));
-  DefaultCredentialsProviderChain chain(*api_, DummyMetadataFetcher(), factories_);
+  MockUpstream mock_creds_provider(cluster_manager_, "");
+  DefaultCredentialsProviderChain chain(*api_, cluster_manager_, DummyMetadataFetcher(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, FullUriNoAuthorizationToken) {
   TestEnvironment::setEnvVar("AWS_CONTAINER_CREDENTIALS_FULL_URI", "http://host/path/to/creds", 1);
   EXPECT_CALL(factories_,
-              createTaskRoleCredentialsProvider(Ref(*api_), _, "http://host/path/to/creds", ""));
-  DefaultCredentialsProviderChain chain(*api_, DummyMetadataFetcher(), factories_);
+              createTaskRoleCredentialsProvider(Ref(*api_), _, _, "http://host/path/to/creds", ""));
+  MockUpstream mock_creds_provider(cluster_manager_, "");
+  DefaultCredentialsProviderChain chain(*api_, cluster_manager_, DummyMetadataFetcher(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, FullUriWithAuthorizationToken) {
   TestEnvironment::setEnvVar("AWS_CONTAINER_CREDENTIALS_FULL_URI", "http://host/path/to/creds", 1);
   TestEnvironment::setEnvVar("AWS_CONTAINER_AUTHORIZATION_TOKEN", "auth_token", 1);
   EXPECT_CALL(factories_, createTaskRoleCredentialsProvider(
-                              Ref(*api_), _, "http://host/path/to/creds", "auth_token"));
-  DefaultCredentialsProviderChain chain(*api_, DummyMetadataFetcher(), factories_);
+                              Ref(*api_), _, _, "http://host/path/to/creds", "auth_token"));
+  MockUpstream mock_creds_provider(cluster_manager_, "");
+  DefaultCredentialsProviderChain chain(*api_, cluster_manager_, DummyMetadataFetcher(),
+                                        factories_);
 }
 
 TEST(CredentialsProviderChainTest, getCredentials_noCredentials) {

@@ -253,8 +253,9 @@ void Span::setSampled(bool sampled) { span_.AddAnnotation("setSampled", {{"sampl
 } // namespace
 
 Driver::Driver(const envoy::config::trace::v3::OpenCensusConfig& oc_config,
-               const LocalInfo::LocalInfo& localinfo, Api::Api& api)
-    : oc_config_(oc_config), local_info_(localinfo) {
+               const LocalInfo::LocalInfo& localinfo, Api::Api& api,
+               Upstream::ClusterManager& cluster_manager)
+    : oc_config_(oc_config), local_info_(localinfo), cm_(cluster_manager) {
   // To give user a chance to correct initially invalid configuration and try to apply it once again
   // without a need to restart Envoy, validation checks must be done prior to any side effects.
   if (oc_config.stackdriver_exporter_enabled() && oc_config.has_stackdriver_grpc_service() &&
@@ -289,7 +290,7 @@ Driver::Driver(const envoy::config::trace::v3::OpenCensusConfig& oc_config,
         // address will be used.
         stackdriver_service.mutable_google_grpc()->set_target_uri(GoogleStackdriverTraceAddress);
       }
-      auto channel = Envoy::Grpc::GoogleGrpcUtils::createChannel(stackdriver_service, api);
+      auto channel = Envoy::Grpc::GoogleGrpcUtils::createChannel(stackdriver_service, api, cm_);
       // TODO(bianpengyuan): add tests for trace_service_stub and initial_metadata options with mock
       // stubs.
       opts.trace_service_stub = ::google::devtools::cloudtrace::v2::TraceService::NewStub(channel);
@@ -322,7 +323,7 @@ Driver::Driver(const envoy::config::trace::v3::OpenCensusConfig& oc_config,
 #ifdef ENVOY_GOOGLE_GRPC
       const envoy::config::core::v3::GrpcService& ocagent_service =
           oc_config.ocagent_grpc_service();
-      auto channel = Envoy::Grpc::GoogleGrpcUtils::createChannel(ocagent_service, api);
+      auto channel = Envoy::Grpc::GoogleGrpcUtils::createChannel(ocagent_service, api, cm_);
       opts.trace_service_stub =
           ::opencensus::proto::agent::trace::v1::TraceService::NewStub(channel);
 #else

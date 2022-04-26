@@ -248,7 +248,8 @@ Credentials CredentialsProviderChain::getCredentials() {
 }
 
 DefaultCredentialsProviderChain::DefaultCredentialsProviderChain(
-    Api::Api& api, const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
+    Api::Api& api, Upstream::ClusterManager& cm,
+    const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
     const CredentialsProviderChainFactories& factories) {
   ENVOY_LOG(debug, "Using environment credentials provider");
   add(factories.createEnvironmentCredentialsProvider());
@@ -261,7 +262,7 @@ DefaultCredentialsProviderChain::DefaultCredentialsProviderChain(
   if (!relative_uri.empty()) {
     const auto uri = absl::StrCat(CONTAINER_METADATA_HOST, relative_uri);
     ENVOY_LOG(debug, "Using task role credentials provider with URI: {}", uri);
-    add(factories.createTaskRoleCredentialsProvider(api, metadata_fetcher, uri));
+    add(factories.createTaskRoleCredentialsProvider(api, cm, metadata_fetcher, uri));
   } else if (!full_uri.empty()) {
     const auto authorization_token =
         absl::NullSafeStringView(std::getenv(AWS_CONTAINER_AUTHORIZATION_TOKEN));
@@ -270,15 +271,15 @@ DefaultCredentialsProviderChain::DefaultCredentialsProviderChain(
                 "Using task role credentials provider with URI: "
                 "{} and authorization token",
                 full_uri);
-      add(factories.createTaskRoleCredentialsProvider(api, metadata_fetcher, full_uri,
+      add(factories.createTaskRoleCredentialsProvider(api, cm, metadata_fetcher, full_uri,
                                                       authorization_token));
     } else {
       ENVOY_LOG(debug, "Using task role credentials provider with URI: {}", full_uri);
-      add(factories.createTaskRoleCredentialsProvider(api, metadata_fetcher, full_uri));
+      add(factories.createTaskRoleCredentialsProvider(api, cm, metadata_fetcher, full_uri));
     }
   } else if (metadata_disabled != TRUE) {
     ENVOY_LOG(debug, "Using instance profile credentials provider");
-    add(factories.createInstanceProfileCredentialsProvider(api, metadata_fetcher));
+    add(factories.createInstanceProfileCredentialsProvider(api, cm, metadata_fetcher));
   }
 }
 

@@ -14,8 +14,10 @@ envoy_cc_mock(
     srcs = ["mocks.cc"],
     hdrs = ["mocks.h"],
     deps = [
+        "//source/common/http:message_lib",
         "//source/extensions/common/aws:credentials_provider_interface",
         "//source/extensions/common/aws:signer_interface",
+        "//test/mocks/upstream:cluster_manager_mocks",
     ],
 )
 

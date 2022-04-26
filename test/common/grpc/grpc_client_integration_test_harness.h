@@ -341,7 +341,7 @@ public:
     GoogleGenericStubFactory stub_factory;
     return std::make_unique<GoogleAsyncClientImpl>(*dispatcher_, *google_tls_, stub_factory,
                                                    stats_scope_, createGoogleGrpcConfig(), *api_,
-                                                   google_grpc_stat_names_);
+                                                   cm_, google_grpc_stat_names_);
 #else
     PANIC("reached unexpected code");
 #endif

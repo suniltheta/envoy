@@ -3,6 +3,7 @@
 #include "envoy/config/core/v3/grpc_service.pb.h"
 #include "envoy/config/grpc_credential/v3/file_based_metadata.pb.h"
 #include "envoy/grpc/google_grpc_creds.h"
+#include "envoy/upstream/cluster_manager.h"
 
 #include "source/common/protobuf/protobuf.h"
 
@@ -24,7 +25,7 @@ class FileBasedMetadataGrpcCredentialsFactory : public Grpc::GoogleGrpcCredentia
 public:
   std::shared_ptr<grpc::ChannelCredentials>
   getChannelCredentials(const envoy::config::core::v3::GrpcService& grpc_service_config,
-                        Api::Api& api) override;
+                        Api::Api& api, Upstream::ClusterManager& cm) override;
 
   Envoy::ProtobufTypes::MessagePtr createEmptyConfigProto() {
     return std::make_unique<envoy::config::grpc_credential::v3::FileBasedMetadataConfig>();

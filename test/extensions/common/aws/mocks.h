@@ -1,7 +1,10 @@
 #pragma once
 
+#include "source/common/http/message_impl.h"
 #include "source/extensions/common/aws/credentials_provider.h"
 #include "source/extensions/common/aws/signer.h"
+
+#include "test/mocks/upstream/cluster_manager.h"
 
 #include "gmock/gmock.h"
 
@@ -39,6 +42,33 @@ public:
 class DummyMetadataFetcher {
 public:
   absl::optional<std::string> operator()(Http::RequestMessage&) { return absl::nullopt; }
+};
+
+// A mock HTTP upstream with response body.
+class MockUpstream {
+public:
+  MockUpstream(Upstream::MockClusterManager& mock_cm, const std::string& response_body)
+      : request_(&mock_cm.thread_local_cluster_.async_client_), response_body_(response_body) {
+    ON_CALL(mock_cm.thread_local_cluster_.async_client_, send_(_, _, _))
+        .WillByDefault(
+            Invoke([this](Http::RequestMessagePtr&, Http::AsyncClient::Callbacks& cb,
+                          const Http::AsyncClient::RequestOptions&) -> Http::AsyncClient::Request* {
+              Http::ResponseMessagePtr response_message(
+                  new Http::ResponseMessageImpl(Http::ResponseHeaderMapPtr{
+                      new Http::TestResponseHeaderMapImpl{{":status", "200"}}}));
+              response_message->body().add(response_body_);
+              cb.onSuccess(request_, std::move(response_message));
+              called_count_++;
+              return &request_;
+            }));
+  }
+
+  int called_count() const { return called_count_; }
+
+private:
+  Http::MockAsyncClientRequest request_;
+  std::string response_body_;
+  int called_count_{};
 };
 
 } // namespace Aws

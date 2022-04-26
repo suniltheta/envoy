@@ -62,10 +62,20 @@ protected:
  */
 class InstanceProfileCredentialsProvider : public MetadataCredentialsProviderBase {
 public:
-  InstanceProfileCredentialsProvider(Api::Api& api, const MetadataFetcher& metadata_fetcher)
-      : MetadataCredentialsProviderBase(api, metadata_fetcher) {}
+  InstanceProfileCredentialsProvider(Api::Api& api, Upstream::ClusterManager& cm,
+                                     const MetadataFetcher& metadata_fetcher,
+                                     absl::string_view cluster_name = {})
+      : MetadataCredentialsProviderBase(api, metadata_fetcher), cm_(cm),
+        cluster_name_(cluster_name) {
+    UNREFERENCED_PARAMETER(cm_);
+    UNREFERENCED_PARAMETER(cluster_name_);
+  }
 
 private:
+  Upstream::ClusterManager& cm_;
+  // TODO (suniltheta) This value can come from config.
+  const std::string cluster_name_;
+
   bool needsRefresh() override;
   void refresh() override;
   void fetchInstanceRole(const std::string& token);
@@ -80,16 +90,25 @@ private:
  */
 class TaskRoleCredentialsProvider : public MetadataCredentialsProviderBase {
 public:
-  TaskRoleCredentialsProvider(Api::Api& api, const MetadataFetcher& metadata_fetcher,
+  TaskRoleCredentialsProvider(Api::Api& api, Upstream::ClusterManager& cm,
+                              const MetadataFetcher& metadata_fetcher,
                               absl::string_view credential_uri,
-                              absl::string_view authorization_token = {})
-      : MetadataCredentialsProviderBase(api, metadata_fetcher), credential_uri_(credential_uri),
-        authorization_token_(authorization_token) {}
+                              absl::string_view authorization_token = {},
+                              absl::string_view cluster_name = {})
+      : MetadataCredentialsProviderBase(api, metadata_fetcher), cm_(cm),
+        credential_uri_(credential_uri), authorization_token_(authorization_token),
+        cluster_name_(cluster_name) {
+    UNREFERENCED_PARAMETER(cm_);
+    UNREFERENCED_PARAMETER(cluster_name_);
+  }
 
 private:
   SystemTime expiration_time_;
+  Upstream::ClusterManager& cm_;
   std::string credential_uri_;
   std::string authorization_token_;
+  // TODO (suniltheta) This value can come from config.
+  const std::string cluster_name_;
 
   bool needsRefresh() override;
   void refresh() override;
@@ -121,11 +140,12 @@ public:
   virtual CredentialsProviderSharedPtr createEnvironmentCredentialsProvider() const PURE;
 
   virtual CredentialsProviderSharedPtr createTaskRoleCredentialsProvider(
-      Api::Api& api, const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
+      Api::Api& api, Upstream::ClusterManager& cm,
+      const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
       absl::string_view credential_uri, absl::string_view authorization_token = {}) const PURE;
 
   virtual CredentialsProviderSharedPtr createInstanceProfileCredentialsProvider(
-      Api::Api& api,
+      Api::Api& api, Upstream::ClusterManager& cm,
       const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher) const PURE;
 };
 
@@ -139,11 +159,13 @@ class DefaultCredentialsProviderChain : public CredentialsProviderChain,
                                         public CredentialsProviderChainFactories {
 public:
   DefaultCredentialsProviderChain(
-      Api::Api& api, const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher)
-      : DefaultCredentialsProviderChain(api, metadata_fetcher, *this) {}
+      Api::Api& api, Upstream::ClusterManager& cm,
+      const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher)
+      : DefaultCredentialsProviderChain(api, cm, metadata_fetcher, *this) {}
 
   DefaultCredentialsProviderChain(
-      Api::Api& api, const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
+      Api::Api& api, Upstream::ClusterManager& cm,
+      const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
       const CredentialsProviderChainFactories& factories);
 
 private:
@@ -152,16 +174,19 @@ private:
   }
 
   CredentialsProviderSharedPtr createTaskRoleCredentialsProvider(
-      Api::Api& api, const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
+      Api::Api& api, Upstream::ClusterManager& cm,
+      const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
       absl::string_view credential_uri, absl::string_view authorization_token = {}) const override {
-    return std::make_shared<TaskRoleCredentialsProvider>(api, metadata_fetcher, credential_uri,
-                                                         authorization_token);
+    return std::make_shared<TaskRoleCredentialsProvider>(api, cm, metadata_fetcher, credential_uri,
+                                                         authorization_token,
+                                                         "task_metadata_server_internal");
   }
 
   CredentialsProviderSharedPtr createInstanceProfileCredentialsProvider(
-      Api::Api& api,
+      Api::Api& api, Upstream::ClusterManager& cm,
       const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher) const override {
-    return std::make_shared<InstanceProfileCredentialsProvider>(api, metadata_fetcher);
+    return std::make_shared<InstanceProfileCredentialsProvider>(
+        api, cm, metadata_fetcher, "instance_metadata_server_internal");
   }
 };
 

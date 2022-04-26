@@ -13,6 +13,7 @@
 #include "test/mocks/http/mocks.h"
 #include "test/mocks/local_info/mocks.h"
 #include "test/mocks/tracing/mocks.h"
+#include "test/mocks/upstream/cluster_manager.h"
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -102,8 +103,9 @@ TEST(OpenCensusTracerTest, Span) {
   registerSpanCatcher();
   OpenCensusConfig oc_config;
   NiceMock<LocalInfo::MockLocalInfo> local_info;
+  NiceMock<Upstream::MockClusterManager> cm_;
   std::unique_ptr<Tracing::Driver> driver(
-      new OpenCensus::Driver(oc_config, local_info, *Api::createApiForTest()));
+      new OpenCensus::Driver(oc_config, local_info, *Api::createApiForTest(), cm_));
 
   NiceMock<Tracing::MockConfig> config;
   Http::TestRequestHeaderMapImpl request_headers{
@@ -188,6 +190,7 @@ void testIncomingHeaders(
   registerSpanCatcher();
   OpenCensusConfig oc_config;
   NiceMock<LocalInfo::MockLocalInfo> local_info;
+  NiceMock<Upstream::MockClusterManager> cm_;
   oc_config.add_incoming_trace_context(OpenCensusConfig::NONE);
   oc_config.add_incoming_trace_context(OpenCensusConfig::B3);
   oc_config.add_incoming_trace_context(OpenCensusConfig::TRACE_CONTEXT);
@@ -199,7 +202,7 @@ void testIncomingHeaders(
   oc_config.add_outgoing_trace_context(OpenCensusConfig::GRPC_TRACE_BIN);
   oc_config.add_outgoing_trace_context(OpenCensusConfig::CLOUD_TRACE_CONTEXT);
   std::unique_ptr<Tracing::Driver> driver(
-      new OpenCensus::Driver(oc_config, local_info, *Api::createApiForTest()));
+      new OpenCensus::Driver(oc_config, local_info, *Api::createApiForTest(), cm_));
   NiceMock<Tracing::MockConfig> config;
   Http::TestRequestHeaderMapImpl request_headers{
       {":path", "/"},
@@ -290,8 +293,9 @@ namespace {
 int SamplerTestHelper(const OpenCensusConfig& oc_config) {
   registerSpanCatcher();
   NiceMock<LocalInfo::MockLocalInfo> local_info;
+  NiceMock<Upstream::MockClusterManager> cm_;
   std::unique_ptr<Tracing::Driver> driver(
-      new OpenCensus::Driver(oc_config, local_info, *Api::createApiForTest()));
+      new OpenCensus::Driver(oc_config, local_info, *Api::createApiForTest(), cm_));
   auto span = ::opencensus::trace::Span::StartSpan("test_span");
   span.End();
   // Retrieve SpanData from the OpenCensus trace exporter.

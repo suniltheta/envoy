@@ -51,6 +51,7 @@ envoy_cc_library(
     deps = [
         "//envoy/api:api_interface",
         "//envoy/config:typed_config_interface",
+        "//envoy/upstream:cluster_manager_interface",
         "@envoy_api//envoy/config/core/v3:pkg_cc_proto",
     ],
 )
