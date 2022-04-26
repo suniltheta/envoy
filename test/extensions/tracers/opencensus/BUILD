@@ -22,6 +22,7 @@ envoy_extension_cc_test(
         "//test/mocks/http:http_mocks",
         "//test/mocks/local_info:local_info_mocks",
         "//test/mocks/tracing:tracing_mocks",
+        "//test/mocks/upstream:cluster_manager_mocks",
         "@envoy_api//envoy/config/trace/v3:pkg_cc_proto",
     ],
 )
