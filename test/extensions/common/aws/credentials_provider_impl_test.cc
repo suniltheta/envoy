@@ -400,7 +400,6 @@ public:
   Event::SimulatedTimeSystem time_system_;
   Api::ApiPtr api_;
   NiceMock<Upstream::MockClusterManager> cluster_manager_;
-  // NiceMock<Server::Configuration::MockFactoryContext> mock_factory_ctx_;
   NiceMock<MockCredentialsProviderChainFactories> factories_;
 };
 

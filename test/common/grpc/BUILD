@@ -111,6 +111,7 @@ envoy_cc_test(
         "//source/common/tracing:http_tracer_lib",
         "//test/mocks/grpc:grpc_mocks",
         "//test/mocks/tracing:tracing_mocks",
+        "//test/mocks/upstream:cluster_manager_mocks",
         "//test/proto:helloworld_proto_cc_proto",
         "//test/test_common:test_time_lib",
         "//test/test_common:utility_lib",
