@@ -90,6 +90,9 @@ FALSE_RUNTIME_GUARD(envoy_reloadable_features_thrift_connection_draining);
 // TODO(birenroy) flip after a burn-in period
 // Requires envoy_reloadable_features_http2_new_codec_wrapper to be enabled.
 FALSE_RUNTIME_GUARD(envoy_reloadable_features_http2_use_oghttp2);
+// TODO(suniltheta): Once the newly added http async technique proves effective and
+// is stabilized get rid of this feature flag and code path that relies on libcurl.
+FALSE_RUNTIME_GUARD(envoy_reloadable_features_use_libcurl_to_fetch_aws_credentials);
 
 // Block of non-boolean flags. These are deprecated. Do not add more.
 ABSL_FLAG(uint64_t, envoy_headermap_lazy_map_min_size, 3, "");  // NOLINT

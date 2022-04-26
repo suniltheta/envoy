@@ -92,6 +92,18 @@ public:
    * gRPC auth plugins that are able to schedule blocking plugins on a different thread.
    */
   static absl::optional<std::string> fetchMetadata(Http::RequestMessage& message);
+
+  /**
+   * @brief Add an internal static cluster
+   * @param cm
+   * @param cluster_name
+   * @param host
+   * @param port
+   * @return true
+   * @return false
+   */
+  static bool addInternalClusterStatic(Upstream::ClusterManager& cm, absl::string_view cluster_name,
+                                       absl::string_view host, absl::string_view port);
 };
 
 } // namespace Aws

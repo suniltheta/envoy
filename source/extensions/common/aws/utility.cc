@@ -1,13 +1,18 @@
 #include "source/extensions/common/aws/utility.h"
 
+#include "envoy/upstream/cluster_manager.h"
+
 #include "source/common/common/empty_string.h"
 #include "source/common/common/fmt.h"
 #include "source/common/common/utility.h"
+#include "source/common/protobuf/message_validator_impl.h"
+#include "source/common/protobuf/utility.h"
 
 #include "absl/strings/match.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "curl/curl.h"
+#include "fmt/printf.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -235,8 +240,9 @@ absl::optional<std::string> Utility::fetchMetadata(Http::RequestMessage& message
 
   const auto host = message.headers().getHostValue();
   const auto path = message.headers().getPathValue();
+  const auto scheme = message.headers().getSchemeValue();
 
-  const std::string url = fmt::format("http://{}{}", host, path);
+  const std::string url = fmt::format("{}://{}{}", scheme, host, path);
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(curl, CURLOPT_TIMEOUT, TIMEOUT.count());
   curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
@@ -275,6 +281,58 @@ absl::optional<std::string> Utility::fetchMetadata(Http::RequestMessage& message
   curl_slist_free_all(headers);
 
   return buffer.empty() ? absl::nullopt : absl::optional<std::string>(buffer);
+}
+
+bool Utility::addInternalClusterStatic(Upstream::ClusterManager& cm, absl::string_view cluster_name,
+                                       absl::string_view host, absl::string_view port) {
+
+  // Check if local cluster exists with that name
+  if (cm.getThreadLocalCluster(cluster_name) == nullptr) {
+    try {
+      envoy::config::cluster::v3::Cluster cluster;
+      constexpr static const char* kSockerAddress = R"EOF(
+"socket_address": {
+  "address": "%s",
+  "port_value": "%s",
+})EOF";
+
+      constexpr static const char* kStaticCluster = R"EOF(
+  {
+    "name": "%s",
+    "connect_timeout": "1s",
+    "type": "static",
+    "lb_policy": "round_robin",
+    "load_assignment": {
+    "endpoints": [
+      {
+        "lb_endpoints": [
+          {
+            "endpoint": {
+              "address": {
+            %s,              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+  }
+  )EOF";
+
+      MessageUtil::loadFromJson(
+          fmt::sprintf(kStaticCluster, cluster_name, fmt::sprintf(kSockerAddress, host, port)),
+          cluster, ProtobufMessage::getNullValidationVisitor());
+      cm.addOrUpdateCluster(cluster, "12345");
+      ENVOY_LOG_MISC(info,
+                     "Added a static internal cluster [name: {}, address:{}:{}] to fetch aws "
+                     "credentials: {}",
+                     cluster_name, host, port);
+    } catch (EnvoyException& e) {
+      ENVOY_LOG_MISC(error, "Error parsing json body, received exception: {}", e.what());
+      return false;
+    }
+  }
+  return true;
 }
 
 } // namespace Aws

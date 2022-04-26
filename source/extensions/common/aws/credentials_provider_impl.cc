@@ -6,7 +6,7 @@
 #include "source/common/http/message_impl.h"
 #include "source/common/http/utility.h"
 #include "source/common/json/json_loader.h"
-#include "source/extensions/common/aws/utility.h"
+#include "source/common/tracing/http_tracer_impl.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -36,6 +36,9 @@ constexpr std::chrono::seconds REFRESH_GRACE_PERIOD{5};
 constexpr char EC2_METADATA_HOST[] = "169.254.169.254:80";
 constexpr char CONTAINER_METADATA_HOST[] = "169.254.170.2:80";
 constexpr char SECURITY_CREDENTIALS_PATH[] = "/latest/meta-data/iam/security-credentials";
+
+constexpr char EC2_METADATA_CLUSTER[] = "ec2_instance_metadata_server_internal";
+constexpr char CONTAINER_METADATA_CLUSTER[] = "ecs_task_metadata_server_internal";
 
 } // namespace
 
@@ -71,28 +74,45 @@ bool InstanceProfileCredentialsProvider::needsRefresh() {
 
 void InstanceProfileCredentialsProvider::refresh() {
   ENVOY_LOG(debug, "Getting AWS credentials from the instance metadata");
-
-  // First discover the Role of this instance
   Http::RequestMessageImpl message;
+  message.headers().setScheme(Http::Headers::get().SchemeValues.Http);
   message.headers().setMethod(Http::Headers::get().MethodValues.Get);
   message.headers().setHost(EC2_METADATA_HOST);
   message.headers().setPath(SECURITY_CREDENTIALS_PATH);
-  const auto instance_role_string = metadata_fetcher_(message);
-  if (!instance_role_string) {
-    ENVOY_LOG(error, "Could not retrieve credentials listing from the instance metadata");
-    return;
+
+  if (Runtime::runtimeFeatureEnabled(
+          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
+    // Using curl to fetch the AWS credentials where we first discover the instance Role.
+    const auto instance_role_string = fetch_metadata_using_curl_(message);
+    if (!instance_role_string) {
+      ENVOY_LOG(error, "Could not retrieve credentials listing from the instance metadata");
+      return;
+    }
+    fetchCredentialFromInstanceRole(std::move(instance_role_string.value()));
+  } else {
+    // Using Http async client to fetch the AWS credentials where we first discover the instance
+    // Role.
+    if (!metadata_fetcher_) {
+      metadata_fetcher_ = create_metadata_fetcher_cb_(cm_, clusterName());
+    } else {
+      metadata_fetcher_->cancel();
+    }
+    on_async_fetch_cb_ = [this](const std::string&& arg) {
+      return this->fetchCredentialFromInstanceRoleAsync(std::move(arg));
+    };
+    metadata_fetcher_->fetch(message, Tracing::NullSpan::instance(), *this);
   }
-  fetchCredentialFromInstanceRole(instance_role_string.value());
 }
 
 void InstanceProfileCredentialsProvider::fetchCredentialFromInstanceRole(
-    const std::string& instance_role) {
+    const std::string&& instance_role, bool async /*default = false*/) {
   if (instance_role.empty()) {
+    ENVOY_LOG(error, "No Roles found from the instance metadata");
     return;
   }
   const auto instance_role_list = StringUtil::splitToken(StringUtil::trim(instance_role), "\n");
   if (instance_role_list.empty()) {
-    ENVOY_LOG(error, "No AWS credentials were found in the instance metadata");
+    ENVOY_LOG(error, "No Roles found from the instance metadata");
     return;
   }
   ENVOY_LOG(debug, "AWS credentials list:\n{}", instance_role);
@@ -104,22 +124,37 @@ void InstanceProfileCredentialsProvider::fetchCredentialFromInstanceRole(
       std::string(instance_role_list[0].data(), instance_role_list[0].size());
   ENVOY_LOG(debug, "AWS credentials path: {}", credential_path);
 
-  // Then fetch and parse the credentials
   Http::RequestMessageImpl message;
+  message.headers().setScheme(Http::Headers::get().SchemeValues.Http);
   message.headers().setMethod(Http::Headers::get().MethodValues.Get);
   message.headers().setHost(EC2_METADATA_HOST);
   message.headers().setPath(credential_path);
 
-  const auto credential_document = metadata_fetcher_(message);
-  if (!credential_document) {
-    ENVOY_LOG(error, "Could not load AWS credentials document from the instance metadata");
-    return;
+  if (!async) {
+    // Fetch and parse the credentials.
+    const auto credential_document = fetch_metadata_using_curl_(message);
+    if (!credential_document) {
+      ENVOY_LOG(error, "Could not load AWS credentials document from the instance metadata");
+      return;
+    }
+    extractCredentials(std::move(credential_document.value()));
+  } else {
+    // Using Http async client to fetch the AWS credentials.
+    if (!metadata_fetcher_) {
+      metadata_fetcher_ = create_metadata_fetcher_cb_(cm_, clusterName());
+    } else {
+      metadata_fetcher_->cancel();
+    }
+
+    on_async_fetch_cb_ = [this](const std::string&& arg) {
+      return this->extractCredentials(std::move(arg));
+    };
+    metadata_fetcher_->fetch(message, Tracing::NullSpan::instance(), *this);
   }
-  extractCredentials(credential_document.value());
 }
 
 void InstanceProfileCredentialsProvider::extractCredentials(
-    const std::string& credential_document_value) {
+    const std::string&& credential_document_value) {
   if (credential_document_value.empty()) {
     return;
   }
@@ -144,6 +179,17 @@ void InstanceProfileCredentialsProvider::extractCredentials(
   last_updated_ = api_.timeSource().systemTime();
 }
 
+void InstanceProfileCredentialsProvider::onMetadataSuccess(const std::string&& body) {
+  // TODO (suniltheta) increment fetch success stats
+  ENVOY_LOG(info, "AWS credentials document fetch success, calling callback func");
+  on_async_fetch_cb_(std::move(body));
+}
+
+void InstanceProfileCredentialsProvider::onMetadataError(Failure) {
+  // TODO (suniltheta) increment fetch failed stats
+  ENVOY_LOG(error, "AWS credentials document fetch failure");
+}
+
 bool TaskRoleCredentialsProvider::needsRefresh() {
   const auto now = api_.timeSource().systemTime();
   return (now - last_updated_ > REFRESH_INTERVAL) ||
@@ -158,19 +204,36 @@ void TaskRoleCredentialsProvider::refresh() {
   Http::Utility::extractHostPathFromUri(credential_uri_, host, path);
 
   Http::RequestMessageImpl message;
+  message.headers().setScheme(Http::Headers::get().SchemeValues.Http);
   message.headers().setMethod(Http::Headers::get().MethodValues.Get);
   message.headers().setHost(host);
   message.headers().setPath(path);
   message.headers().setCopy(Http::CustomHeaders::get().Authorization, authorization_token_);
-  const auto credential_document = metadata_fetcher_(message);
-  if (!credential_document) {
-    ENVOY_LOG(error, "Could not load AWS credentials document from the task role");
-    return;
+  if (Runtime::runtimeFeatureEnabled(
+          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
+    // Using curl to fetch the AWS credentials.
+    const auto credential_document = fetch_metadata_using_curl_(message);
+    if (!credential_document) {
+      ENVOY_LOG(error, "Could not load AWS credentials document from the task role");
+      return;
+    }
+    extractCredentials(std::move(credential_document.value()));
+  } else {
+    // Using Http async client to fetch the AWS credentials.
+    if (!metadata_fetcher_) {
+      metadata_fetcher_ = create_metadata_fetcher_cb_(cm_, clusterName());
+    } else {
+      metadata_fetcher_->cancel();
+    }
+    on_async_fetch_cb_ = [this](const std::string&& arg) {
+      return this->extractCredentials(std::move(arg));
+    };
+    metadata_fetcher_->fetch(message, Tracing::NullSpan::instance(), *this);
   }
-  extractCredentials(credential_document.value());
 }
 
-void TaskRoleCredentialsProvider::extractCredentials(const std::string& credential_document_value) {
+void TaskRoleCredentialsProvider::extractCredentials(
+    const std::string&& credential_document_value) {
   if (credential_document_value.empty()) {
     return;
   }
@@ -204,6 +267,17 @@ void TaskRoleCredentialsProvider::extractCredentials(const std::string& credenti
   cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
 }
 
+void TaskRoleCredentialsProvider::onMetadataSuccess(const std::string&& body) {
+  // TODO (suniltheta) increment fetch success stats
+  ENVOY_LOG(debug, "AWS credentials document fetch success, calling callback func");
+  on_async_fetch_cb_(std::move(body));
+}
+
+void TaskRoleCredentialsProvider::onMetadataError(Failure) {
+  // TODO (suniltheta) increment fetch failed stats
+  ENVOY_LOG(error, "AWS credentials document fetch failure");
+}
+
 Credentials CredentialsProviderChain::getCredentials() {
   for (auto& provider : providers_) {
     const auto credentials = provider->getCredentials();
@@ -218,7 +292,7 @@ Credentials CredentialsProviderChain::getCredentials() {
 
 DefaultCredentialsProviderChain::DefaultCredentialsProviderChain(
     Api::Api& api, Upstream::ClusterManager& cm,
-    const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
+    const MetadataCredentialsProviderBase::FetchMetadataUsingCurl& fetch_metadata_using_curl,
     const CredentialsProviderChainFactories& factories) {
   ENVOY_LOG(debug, "Using environment credentials provider");
   add(factories.createEnvironmentCredentialsProvider());
@@ -231,7 +305,9 @@ DefaultCredentialsProviderChain::DefaultCredentialsProviderChain(
   if (!relative_uri.empty()) {
     const auto uri = absl::StrCat(CONTAINER_METADATA_HOST, relative_uri);
     ENVOY_LOG(debug, "Using task role credentials provider with URI: {}", uri);
-    add(factories.createTaskRoleCredentialsProvider(api, cm, metadata_fetcher, uri));
+    add(factories.createTaskRoleCredentialsProvider(api, cm, fetch_metadata_using_curl,
+                                                    MetadataFetcher::create,
+                                                    CONTAINER_METADATA_CLUSTER, uri));
   } else if (!full_uri.empty()) {
     const auto authorization_token =
         absl::NullSafeStringView(std::getenv(AWS_CONTAINER_AUTHORIZATION_TOKEN));
@@ -240,15 +316,19 @@ DefaultCredentialsProviderChain::DefaultCredentialsProviderChain(
                 "Using task role credentials provider with URI: "
                 "{} and authorization token",
                 full_uri);
-      add(factories.createTaskRoleCredentialsProvider(api, cm, metadata_fetcher, full_uri,
-                                                      authorization_token));
+      add(factories.createTaskRoleCredentialsProvider(
+          api, cm, fetch_metadata_using_curl, MetadataFetcher::create, CONTAINER_METADATA_CLUSTER,
+          full_uri, authorization_token));
     } else {
       ENVOY_LOG(debug, "Using task role credentials provider with URI: {}", full_uri);
-      add(factories.createTaskRoleCredentialsProvider(api, cm, metadata_fetcher, full_uri));
+      add(factories.createTaskRoleCredentialsProvider(api, cm, fetch_metadata_using_curl,
+                                                      MetadataFetcher::create,
+                                                      CONTAINER_METADATA_CLUSTER, full_uri));
     }
   } else if (metadata_disabled != TRUE) {
     ENVOY_LOG(debug, "Using instance profile credentials provider");
-    add(factories.createInstanceProfileCredentialsProvider(api, cm, metadata_fetcher));
+    add(factories.createInstanceProfileCredentialsProvider(
+        api, cm, fetch_metadata_using_curl, MetadataFetcher::create, EC2_METADATA_CLUSTER));
   }
 }
 
