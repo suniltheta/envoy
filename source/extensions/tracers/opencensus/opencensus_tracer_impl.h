@@ -4,6 +4,7 @@
 #include "envoy/config/trace/v3/opencensus.pb.h"
 #include "envoy/local_info/local_info.h"
 #include "envoy/tracing/trace_driver.h"
+#include "envoy/upstream/cluster_manager.h"
 
 #include "source/common/common/logger.h"
 
@@ -18,7 +19,8 @@ namespace OpenCensus {
 class Driver : public Tracing::Driver, Logger::Loggable<Logger::Id::tracing> {
 public:
   Driver(const envoy::config::trace::v3::OpenCensusConfig& oc_config,
-         const LocalInfo::LocalInfo& localinfo, Api::Api& api);
+         const LocalInfo::LocalInfo& localinfo, Api::Api& api,
+         Upstream::ClusterManager& cluster_manager);
 
   // Tracing::Driver
   Tracing::SpanPtr startSpan(const Tracing::Config& config, Tracing::TraceContext& trace_context,
@@ -31,6 +33,7 @@ private:
 
   const envoy::config::trace::v3::OpenCensusConfig oc_config_;
   const LocalInfo::LocalInfo& local_info_;
+  Upstream::ClusterManager& cm_;
 };
 
 } // namespace OpenCensus

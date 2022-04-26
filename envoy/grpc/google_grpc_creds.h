@@ -6,6 +6,7 @@
 #include "envoy/common/pure.h"
 #include "envoy/config/core/v3/grpc_service.pb.h"
 #include "envoy/config/typed_config.h"
+#include "envoy/upstream/cluster_manager.h"
 
 #include "grpcpp/grpcpp.h"
 
@@ -33,7 +34,7 @@ public:
    */
   virtual std::shared_ptr<grpc::ChannelCredentials>
   getChannelCredentials(const envoy::config::core::v3::GrpcService& grpc_service_config,
-                        Api::Api& api) PURE;
+                        Api::Api& api, Upstream::ClusterManager& cm) PURE;
 
   std::string category() const override { return "envoy.grpc_credentials"; }
 };

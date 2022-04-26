@@ -10,6 +10,7 @@
 
 #include "test/mocks/grpc/mocks.h"
 #include "test/mocks/tracing/mocks.h"
+#include "test/mocks/upstream/cluster_manager.h"
 #include "test/proto/helloworld.pb.h"
 #include "test/test_common/test_time.h"
 #include "test/test_common/utility.h"
@@ -69,14 +70,15 @@ public:
   }
 
   virtual void initialize() {
-    grpc_client_ = std::make_unique<GoogleAsyncClientImpl>(*dispatcher_, *tls_, stub_factory_,
-                                                           scope_, config_, *api_, stat_names_);
+    grpc_client_ = std::make_unique<GoogleAsyncClientImpl>(
+        *dispatcher_, *tls_, stub_factory_, scope_, config_, *api_, cluster_manager_, stat_names_);
   }
 
   envoy::config::core::v3::GrpcService config_;
   DangerousDeprecatedTestTime test_time_;
   Stats::IsolatedStoreImpl stats_store_;
   Api::ApiPtr api_;
+  NiceMock<Upstream::MockClusterManager> cluster_manager_;
   Event::DispatcherPtr dispatcher_;
   Stats::ScopeSharedPtr scope_;
   GoogleAsyncClientThreadLocalPtr tls_;
@@ -179,10 +181,12 @@ TEST_F(EnvoyGoogleAsyncClientImplTest, RequestHttpStartFail) {
 class EnvoyGoogleLessMockedAsyncClientImplTest : public EnvoyGoogleAsyncClientImplTest {
 public:
   void initialize() override {
-    grpc_client_ = std::make_unique<GoogleAsyncClientImpl>(*dispatcher_, *tls_, real_stub_factory_,
-                                                           scope_, config_, *api_, stat_names_);
+    grpc_client_ =
+        std::make_unique<GoogleAsyncClientImpl>(*dispatcher_, *tls_, real_stub_factory_, scope_,
+                                                config_, *api_, cluster_manager_, stat_names_);
   }
 
+  NiceMock<Upstream::MockClusterManager> cluster_manager_;
   GoogleGenericStubFactory real_stub_factory_;
 };
 
