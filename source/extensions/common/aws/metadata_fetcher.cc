@@ -48,11 +48,12 @@ public:
     constexpr uint64_t RETRY_DELAY = 1000;
     constexpr uint64_t TIMEOUT = 5 * 1000;
 
-    const auto host = message.headers().getHostValue();
+    const auto host_attributes = Http::Utility::parseAuthority(message.headers().getHostValue());
+    const auto host = host_attributes.host_;
     const auto path = message.headers().getPathValue();
     const auto scheme = message.headers().getSchemeValue();
-    ENVOY_LOG(debug, "fetch AWS Metadata from [uri = {}]: start",
-              fmt::format("{}://{}{}", scheme, host, path));
+    ENVOY_LOG(debug, "fetch AWS Metadata at [uri = {}]: start from cluster {}",
+              fmt::format("{}://{}{}", scheme, host, path), cluster_name_);
 
     // if (!provider_.clusterName()) {
     //   ENVOY_LOG(error, "{}: fetch AWS Metadata failed: cluster name is not configured",

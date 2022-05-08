@@ -30,6 +30,20 @@ namespace Aws {
 
 MATCHER_P(WithName, expectedName, "") { return arg.name() == expectedName; }
 
+MATCHER_P(WithAttribute, expectedCluster, "") {
+  const auto argSocketAddress =
+      arg.load_assignment().endpoints()[0].lb_endpoints()[0].endpoint().address().socket_address();
+  const auto expectedSocketAddress = expectedCluster.load_assignment()
+                                         .endpoints()[0]
+                                         .lb_endpoints()[0]
+                                         .endpoint()
+                                         .address()
+                                         .socket_address();
+  return arg.name() == expectedCluster.name() &&
+         argSocketAddress.address() == expectedSocketAddress.address() &&
+         argSocketAddress.port_value() == expectedSocketAddress.port_value();
+}
+
 class MetadataFetcherTest : public testing::Test {
 public:
   void setupFetcher() {
@@ -102,12 +116,48 @@ TEST_F(MetadataFetcherTest, TestHttpFailure) {
 
 TEST_F(MetadataFetcherTest, TestAddMissingCluster) {
   // Setup without thread local cluster yet
+  Http::RequestMessageImpl message;
+  message.headers().setScheme(Http::Headers::get().SchemeValues.Http);
+  message.headers().setMethod(Http::Headers::get().MethodValues.Get);
+  message.headers().setHost("169.254.170.2:80");
+  message.headers().setPath("/v2/credentials/c68caeb5-ef71-4914-8170-111111111111");
+
+  envoy::config::cluster::v3::Cluster expected_cluster;
+  constexpr static const char* kStaticCluster = R"EOF(
+  {
+    "name": "cluster_name",
+    "connect_timeout": "1s",
+    "type": "static",
+    "lb_policy": "round_robin",
+    "load_assignment": {
+      "endpoints": [
+        {
+          "lb_endpoints": [
+            {
+              "endpoint": {
+                "address": {
+                  "socket_address": {
+                    "address": "169.254.170.2",
+                    "port_value": "80",
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+  )EOF";
+  MessageUtil::loadFromJson(kStaticCluster, expected_cluster,
+                            ProtobufMessage::getNullValidationVisitor());
   NiceMock<Upstream::MockThreadLocalCluster> cluster_;
   fetcher_ = MetadataFetcher::create(mock_factory_ctx_.cluster_manager_, "cluster_name");
   EXPECT_CALL(mock_factory_ctx_.cluster_manager_, getThreadLocalCluster(_))
       .WillOnce(Return(nullptr))
       .WillOnce(Return(&cluster_));
-  EXPECT_CALL(mock_factory_ctx_.cluster_manager_, addOrUpdateCluster(WithName("cluster_name"), _))
+  EXPECT_CALL(mock_factory_ctx_.cluster_manager_,
+              addOrUpdateCluster(WithAttribute(expected_cluster), _))
       .WillOnce(Return(true));
 
   Http::RequestMessageImpl message;
