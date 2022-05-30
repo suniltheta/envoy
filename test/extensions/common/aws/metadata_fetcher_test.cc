@@ -71,6 +71,34 @@ TEST_F(MetadataFetcherTest, TestGetSuccess) {
   fetcher_->fetch(message, parent_span_, receiver);
 }
 
+TEST_F(MetadataFetcherTest, TestRequestMatch) {
+  // Setup
+  setupFetcher();
+  Http::RequestMessageImpl message;
+  message.headers().setScheme(Http::Headers::get().SchemeValues.Http);
+  message.headers().setMethod(Http::Headers::get().MethodValues.Get);
+  message.headers().setHost("169.254.170.2:80");
+  message.headers().setPath("/v2/credentials/c68caeb5-ef71-4914-8170-111111111111");
+
+  MockUpstream mock_result(mock_factory_ctx_.cluster_manager_, "200", "not_empty");
+  MockMetadataReceiver receiver;
+
+  EXPECT_CALL(mock_factory_ctx_.cluster_manager_.thread_local_cluster_.async_client_,
+              send_(_, _, _))
+      .WillOnce(Invoke([](Http::RequestMessagePtr& request, Http::AsyncClient::Callbacks&,
+                          const Http::AsyncClient::RequestOptions&) -> Http::AsyncClient::Request* {
+        EXPECT_EQ("169.254.170.2", request->headers().getHostValue());
+        EXPECT_EQ("/v2/credentials/c68caeb5-ef71-4914-8170-111111111111",
+                  request->headers().getPathValue());
+        EXPECT_EQ(Http::Headers::get().MethodValues.Get, request->headers().getMethodValue());
+        EXPECT_EQ(Http::Headers::get().SchemeValues.Http, request->headers().getSchemeValue());
+        return nullptr;
+      }));
+
+  // Act
+  fetcher_->fetch(message, parent_span_, receiver);
+}
+
 TEST_F(MetadataFetcherTest, TestGet400) {
   // Setup
   setupFetcher();
@@ -160,8 +188,6 @@ TEST_F(MetadataFetcherTest, TestAddMissingCluster) {
               addOrUpdateCluster(WithAttribute(expected_cluster), _))
       .WillOnce(Return(true));
 
-  Http::RequestMessageImpl message;
-
   MockUpstream mock_result(mock_factory_ctx_.cluster_manager_, "200", "not_empty");
   MockMetadataReceiver receiver;
   EXPECT_CALL(receiver, onMetadataError(testing::_)).Times(0);
@@ -241,8 +267,6 @@ TEST_F(MetadataFetcherTest, TestDefaultRetryPolicy) {
       .WillOnce(Invoke(
           [](Http::RequestMessagePtr&, Http::AsyncClient::Callbacks&,
              const Http::AsyncClient::RequestOptions& options) -> Http::AsyncClient::Request* {
-            // RetryingParameters const& rp = GetParam();
-
             EXPECT_TRUE(options.retry_policy.has_value());
             EXPECT_TRUE(options.buffer_body_for_retry);
             EXPECT_TRUE(options.retry_policy.value().has_num_retries());

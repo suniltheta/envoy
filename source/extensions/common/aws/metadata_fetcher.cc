@@ -52,6 +52,7 @@ public:
     const auto host = host_attributes.host_;
     const auto path = message.headers().getPathValue();
     const auto scheme = message.headers().getSchemeValue();
+    const auto method = message.headers().getMethodValue();
     ENVOY_LOG(debug, "fetch AWS Metadata at [uri = {}]: start from cluster {}",
               fmt::format("{}://{}{}", scheme, host, path), cluster_name_);
 
@@ -77,6 +78,7 @@ public:
     messagePtr->headers().setHost(host);
     messagePtr->headers().setPath(path);
     messagePtr->headers().setScheme(scheme);
+    messagePtr->headers().setReferenceMethod(method);
 
     auto options = Http::AsyncClient::RequestOptions()
                        .setTimeout(std::chrono::milliseconds(TIMEOUT))
@@ -90,7 +92,7 @@ public:
         Protobuf::util::TimeUtil::MillisecondsToDuration(TIMEOUT));
     route_retry_policy.mutable_per_try_idle_timeout()->CopyFrom(
         Protobuf::util::TimeUtil::MillisecondsToDuration(RETRY_DELAY));
-    route_retry_policy.set_retry_on("5xx,gateway-error,connect-failure,reset");
+    route_retry_policy.set_retry_on("5xx,gateway-error,connect-failure,reset,refused-stream");
 
     options.setRetryPolicy(route_retry_policy);
     options.setBufferBodyForRetry(true);
