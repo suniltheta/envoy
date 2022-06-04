@@ -39,10 +39,10 @@ public:
              MetadataFetcher::MetadataReceiver& receiver) override {
     ENVOY_LOG(trace, "{}", __func__);
 
-    ASSERT(!receiver_);
-
     complete_ = false;
-    receiver_ = &receiver;
+    if (!receiver_) {
+      receiver_ = &receiver;
+    }
 
     constexpr uint64_t MAX_RETRIES = 4;
     constexpr uint64_t RETRY_DELAY = 1000;
@@ -144,10 +144,7 @@ private:
   std::string cluster_name_;
   Http::AsyncClient::Request* request_{};
 
-  void reset() {
-    request_ = nullptr;
-    receiver_ = nullptr;
-  }
+  void reset() { request_ = nullptr; }
 };
 } // namespace
 
