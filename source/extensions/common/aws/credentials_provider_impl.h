@@ -6,6 +6,7 @@
 #include "envoy/api/api.h"
 #include "envoy/event/timer.h"
 #include "envoy/http/message.h"
+#include "envoy/thread_local/thread_local.h"
 
 #include "source/common/common/logger.h"
 #include "source/common/common/thread.h"
@@ -27,6 +28,7 @@ namespace Aws {
  */
 using CreateMetadataFetcherCb =
     std::function<MetadataFetcherPtr(Upstream::ClusterManager&, absl::string_view)>;
+using CredentialsConstSharedPtr = std::shared_ptr<const Credentials>;
 
 /**
  * Retrieve AWS credentials from the environment variables.
@@ -52,15 +54,42 @@ public:
                                   absl::string_view cluster_name)
       : api_(api), fetch_metadata_using_curl_(fetch_metadata_using_curl),
         create_metadata_fetcher_cb_(create_metadata_fetcher_cb),
-        cluster_name_(std::string(cluster_name)) {}
+        cluster_name_(std::string(cluster_name)), cache_duration_(getCacheDuration()),
+        tls_(context_.threadLocal()) {
+    tls_.set([](Envoy::Event::Dispatcher& dispatcher) {
+      return std::make_shared<ThreadLocalCredentialsCache>();
+    });
+    cache_duration_timer_ = context_.mainThreadDispatcher().createTimer([this]() -> void {
+      const Thread::LockGuard lock(lock_);
+      refresh();
+    });
+  }
 
   Credentials getCredentials() override {
     refreshIfNeeded();
-    return cached_credentials_;
+    return tls_->credentials_.get();
   }
   const std::string& clusterName() { return cluster_name_; }
 
 protected:
+  struct ThreadLocalCredentialsCache : public ThreadLocal::ThreadLocalObject {
+    // TODO(suniltheta): Move credential expiration date in here
+    ThreadLocalCredentialsCache() {
+      // Creating empty credentials as default.
+      credentials_ = std::make_shared<Credentials>();
+    }
+    // The credentials object
+    CredentialsConstSharedPtr credentials_;
+  };
+
+  // Set Credentials shared_ptr to all threads.
+  void setCredentialsToAllThreads(Credentials&& creds) {
+    CredentialsConstSharedPtr shared_credentials = std::move(creds);
+    tls_.runOnAllThreads([shared_credentials](OptRef<ThreadLocalCredentialsCache> obj) {
+      obj->credentials_ = shared_credentials;
+    });
+  }
+
   Api::Api& api_;
   OnAsyncFetchCb on_async_fetch_cb_;
   // Store the method to fetch metadata from libcurl (deprecated)
@@ -70,16 +99,25 @@ protected:
   // The callback used to create a MetadataFetcher instance.
   CreateMetadataFetcherCb create_metadata_fetcher_cb_;
 
+  // The cache duration.
+  const std::chrono::seconds cache_duration_;
+  // The timer to trigger fetch due to cache duration.
+  Envoy::Event::TimerPtr cache_duration_timer_;
+  // the thread local slot for cache.
+  ThreadLocal::TypedSlot<ThreadLocalCredentialsCache> tls_;
+
   // TODO (suniltheta) This value can come from config.
   std::string cluster_name_;
   SystemTime last_updated_;
-  Credentials cached_credentials_;
   Thread::MutexBasicLockable lock_;
 
   void refreshIfNeeded();
 
   virtual bool needsRefresh() PURE;
   virtual void refresh() PURE;
+
+  // Get the Metadata credentials cache duration.
+  static std::chrono::seconds getCacheDuration();
 };
 
 /**
@@ -96,8 +134,15 @@ public:
                                      absl::string_view cluster_name)
       : MetadataCredentialsProviderBase(api, fetch_metadata_using_curl, create_metadata_fetcher_cb,
                                         cluster_name),
-        cm_(cm) {}
+        cm_(cm) {
+    // Just trigger a refresh of credentials.
+    // TODO (suniltheta) Add capability to register with init manager.
+    const Thread::LockGuard lock(lock_);
+    refresh();
+  }
 
+  // Handle fetch done.
+  void handleFetchDone();
   // Following functions are for MetadataFetcher::MetadataReceiver interface
   void onMetadataSuccess(const std::string&& body) override;
   void onMetadataError(Failure reason) override;
@@ -130,8 +175,15 @@ public:
                               absl::string_view cluster_name = {})
       : MetadataCredentialsProviderBase(api, fetch_metadata_using_curl, create_metadata_fetcher_cb,
                                         cluster_name),
-        cm_(cm), credential_uri_(credential_uri), authorization_token_(authorization_token) {}
+        cm_(cm), credential_uri_(credential_uri), authorization_token_(authorization_token) {
+    // Just trigger a refresh of credentials.
+    // TODO (suniltheta) Add capability to register with init manager.
+    const Thread::LockGuard lock(lock_);
+    refresh();
+  }
 
+  // Handle fetch done.
+  void handleFetchDone();
   // Following functions are for MetadataFetcher::MetadataReceiver interface
   void onMetadataSuccess(const std::string&& body) override;
   void onMetadataError(Failure reason) override;

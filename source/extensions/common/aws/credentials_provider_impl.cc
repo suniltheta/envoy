@@ -68,6 +68,11 @@ void MetadataCredentialsProviderBase::refreshIfNeeded() {
   }
 }
 
+std::chrono::seconds MetadataCredentialsProviderBase::getCacheDuration() {
+  // TODO (suniltheta) This value should be configurable.
+  return std::chrono::seconds(REFRESH_INTERVAL * 60 * 60 - REFRESH_GRACE_PERIOD);
+}
+
 bool InstanceProfileCredentialsProvider::needsRefresh() {
   return api_.timeSource().systemTime() - last_updated_ > REFRESH_INTERVAL;
 }
@@ -175,8 +180,13 @@ void InstanceProfileCredentialsProvider::extractCredentials(
             secret_access_key.empty() ? "" : "*****", AWS_SESSION_TOKEN,
             session_token.empty() ? "" : "*****");
 
-  cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
   last_updated_ = api_.timeSource().systemTime();
+  setCredentialsToAllThreads(
+      std::move(Credentials(access_key_id, secret_access_key, session_token)));
+}
+
+void InstanceProfileCredentialsProvider::handleFetchDone() {
+  cache_duration_timer_->enableTimer(cache_duration_);
 }
 
 void InstanceProfileCredentialsProvider::onMetadataSuccess(const std::string&& body) {
@@ -264,7 +274,12 @@ void TaskRoleCredentialsProvider::extractCredentials(
   }
 
   last_updated_ = api_.timeSource().systemTime();
-  cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
+  setCredentialsToAllThreads(
+      std::move(Credentials(access_key_id, secret_access_key, session_token)));
+}
+
+void TaskRoleCredentialsProvider::handleFetchDone() {
+  cache_duration_timer_->enableTimer(cache_duration_);
 }
 
 void TaskRoleCredentialsProvider::onMetadataSuccess(const std::string&& body) {
