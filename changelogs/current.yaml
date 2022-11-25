@@ -97,6 +97,9 @@ removed_config_or_runtime:
     removed ``envoy.reloadable_features.do_not_await_headers_on_upstream_timeout_to_emit_stats`` and legacy code paths.
 
 new_features:
+- area: aws_lambda
+  change: |
+    added :ref:`match_excluded_headers <envoy_v3_api_field_extensions.filters.http.aws_lambda.v3.Config.match_excluded_headers>` to the AWS Lambda filter to optionally exclude request headers from signing.
 - area: build
   change: |
     added an option ``--define=library_autolink=disabled`` to disable autolinking libraries.

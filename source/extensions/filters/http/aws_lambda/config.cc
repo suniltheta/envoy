@@ -47,12 +47,12 @@ Http::FilterFactoryCb AwsLambdaFilterFactory::createFilterFactoryFromProtoTyped(
       std::make_shared<Extensions::Common::Aws::DefaultCredentialsProviderChain>(
           context.api(), Extensions::Common::Aws::Utility::fetchMetadata);
 
+  const auto matcher_config = Extensions::Common::Aws::AwsSigV4HeaderExclusionVector(
+      proto_config.match_excluded_headers().begin(), proto_config.match_excluded_headers().end());
+
   auto signer = std::make_shared<Extensions::Common::Aws::SignerImpl>(
       service_name, region, std::move(credentials_provider),
-      context.mainThreadDispatcher().timeSource(),
-      // TODO: extend API to allow specifying header exclusion. ref:
-      // https://github.com/envoyproxy/envoy/pull/18998
-      Extensions::Common::Aws::AwsSigV4HeaderExclusionVector{});
+      context.mainThreadDispatcher().timeSource(), matcher_config);
 
   FilterSettings filter_settings{*arn, getInvocationMode(proto_config),
                                  proto_config.payload_passthrough()};

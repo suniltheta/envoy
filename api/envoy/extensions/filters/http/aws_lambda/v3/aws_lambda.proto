@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package envoy.extensions.filters.http.aws_lambda.v3;
 
+import "envoy/type/matcher/v3/string.proto";
+
 import "udpa/annotations/status.proto";
 import "udpa/annotations/versioning.proto";
 import "validate/validate.proto";
@@ -17,6 +19,7 @@ option (udpa.annotations.file_status).package_version_status = ACTIVE;
 // [#extension: envoy.filters.http.aws_lambda]
 
 // AWS Lambda filter config
+// [#next-free-field: 5]
 message Config {
   option (udpa.annotations.versioning).previous_message_type =
       "envoy.config.filter.http.aws_lambda.v2alpha.Config";
@@ -42,6 +45,22 @@ message Config {
 
   // Determines the way to invoke the Lambda function.
   InvocationMode invocation_mode = 3 [(validate.rules).enum = {defined_only: true}];
+
+  // A list of request header string matchers that will be excluded from signing. The excluded header can be matched by
+  // any patterns defined in the StringMatcher proto (e.g. exact string, prefix, regex, etc).
+  //
+  // Example:
+  //
+  // .. code-block:: yaml
+  //
+  //     match_excluded_headers:
+  //     - prefix: x-envoy
+  //     - exact: foo
+  //     - exact: bar
+  //
+  // When applied, all headers that start with "x-envoy" and headers "foo" and "bar" will not be signed.
+  // This config will currently be ignore if set via Per-route configuration.
+  repeated type.matcher.v3.StringMatcher match_excluded_headers = 4;
 }
 
 // Per-route configuration for AWS Lambda. This can be useful when invoking a different Lambda function or a different

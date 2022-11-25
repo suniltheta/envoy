@@ -27,10 +27,27 @@ TEST(AwsLambdaFilterConfigTest, ValidConfigCreatesFilter) {
 arn: "arn:aws:lambda:region:424242:function:fun"
 payload_passthrough: true
 invocation_mode: asynchronous
+match_excluded_headers:
+  - prefix: x-envoy
+  - exact: foo
+  - exact: bar
   )EOF";
 
   LambdaConfig proto_config;
   TestUtility::loadFromYamlAndValidate(yaml, proto_config);
+
+  LambdaConfig expected_config;
+  expected_config.set_arn("arn:aws:lambda:region:424242:function:fun");
+  expected_config.set_payload_passthrough(true);
+  expected_config.set_invocation_mode(LambdaConfig::ASYNCHRONOUS);
+  expected_config.add_match_excluded_headers()->set_prefix("x-envoy");
+  expected_config.add_match_excluded_headers()->set_exact("foo");
+  expected_config.add_match_excluded_headers()->set_exact("bar");
+
+  Protobuf::util::MessageDifferencer differencer;
+  differencer.set_message_field_comparison(Protobuf::util::MessageDifferencer::EQUAL);
+  differencer.set_repeated_field_comparison(Protobuf::util::MessageDifferencer::AS_SET);
+  EXPECT_TRUE(differencer.Compare(expected_config, proto_config));
 
   testing::NiceMock<Server::Configuration::MockFactoryContext> context;
   AwsLambdaFilterFactory factory;
@@ -132,7 +149,7 @@ TEST(AwsLambdaFilterConfigTest, PerRouteConfigWithInvalidARNThrows) {
                EnvoyException);
 }
 
-TEST(AwsLambdaFilterConfigTest, AsynchrnousPerRouteConfig) {
+TEST(AwsLambdaFilterConfigTest, AsynchronousPerRouteConfig) {
   const std::string yaml = R"EOF(
   invoke_config:
     arn: "arn:aws:lambda:region:424242:function:fun"

@@ -72,6 +72,12 @@ On the other end, the response of the Lambda function must conform to the follow
 
 .. _RFC: https://tools.ietf.org/html/rfc6265#section-4.1
 
+
+The :ref:`match_excluded_headers <envoy_v3_api_field_extensions.filters.http.aws_lambda.v3.Config.match_excluded_headers>`
+option allows excluding certain request headers from being signed. This usually applies to headers that are likely to mutate or
+are added later such as in retries. By default, the headers ``x-forwarded-for``, ``x-forwarded-proto``, and ``x-amzn-trace-id`` are always excluded.
+
+
 .. note::
 
     The target cluster must have its endpoint set to the `regional Lambda endpoint`_. Use the same region as the Lambda
@@ -110,6 +116,10 @@ In this configuration, the filter applies to all routes in the filter chain of t
       "@type": type.googleapis.com/envoy.extensions.filters.http.aws_lambda.v3.Config
       arn: "arn:aws:lambda:us-west-2:987654321:function:hello_envoy"
       payload_passthrough: true
+      match_excluded_headers:
+      - prefix: x-envoy
+      - prefix: x-forwarded
+      - exact: x-amzn-trace-id
 
 The corresponding regional endpoint must be specified in the target cluster. So, for example if the Lambda function is
 in us-west-2:
@@ -153,6 +163,10 @@ have specific Lambda metadata.
           invoke_config:
             arn: "arn:aws:lambda:us-west-2:987654321:function:hello_envoy"
             payload_passthrough: false
+            match_excluded_headers:
+            - prefix: x-envoy
+            - prefix: x-forwarded
+            - exact: x-amzn-trace-id
 
 
 An example with the Lambda metadata applied to a weighted-cluster:

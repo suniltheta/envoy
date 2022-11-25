@@ -39,6 +39,7 @@ envoy_cc_extension(
     deps = [
         ":aws_lambda_filter_lib",
         "//envoy/registry",
+        "//source/common/common:matchers_lib",
         "//source/extensions/filters/http/common:factory_base_lib",
         "@envoy_api//envoy/extensions/filters/http/aws_lambda/v3:pkg_cc_proto",
     ],
