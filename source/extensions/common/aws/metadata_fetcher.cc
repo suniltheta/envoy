@@ -74,11 +74,14 @@ public:
       return;
     }
     const auto thread_local_cluster = cm_.getThreadLocalCluster(cluster_name_);
-    Http::RequestMessagePtr messagePtr = std::make_unique<Http::RequestMessageImpl>();
-    messagePtr->headers().setHost(host);
-    messagePtr->headers().setPath(path);
-    messagePtr->headers().setScheme(scheme);
-    messagePtr->headers().setReferenceMethod(method);
+
+    Http::RequestHeaderMapPtr headersPtr =
+        Envoy::Http::createHeaderMap<Envoy::Http::RequestHeaderMapImpl>(
+            {{Envoy::Http::Headers::get().Method, std::string(method)},
+             {Envoy::Http::Headers::get().Host, std::string(host)},
+             {Envoy::Http::Headers::get().Scheme, std::string(scheme)},
+             {Envoy::Http::Headers::get().Path, std::string(path)}});
+    auto messagePtr = std::make_unique<Envoy::Http::RequestMessageImpl>(std::move(headersPtr));
 
     auto options = Http::AsyncClient::RequestOptions()
                        .setTimeout(std::chrono::milliseconds(TIMEOUT))
@@ -118,8 +121,14 @@ public:
         receiver_->onMetadataError(MetadataFetcher::MetadataReceiver::Failure::Network);
       }
     } else {
-      ENVOY_LOG(debug, "{}: fetch AWS Metadata [cluster = {}]: response status code {}", __func__,
-                cluster_name_, status_code);
+      if (response->body().length() != 0) {
+        ENVOY_LOG(debug, "{}: fetch AWS Metadata [cluster = {}]: response status code {}, body: {}",
+                  __func__, cluster_name_, status_code, response->bodyAsString());
+      } else {
+        ENVOY_LOG(debug,
+                  "{}: fetch AWS Metadata [cluster = {}]: response status code {}, body is empty",
+                  __func__, cluster_name_, status_code);
+      }
       receiver_->onMetadataError(MetadataFetcher::MetadataReceiver::Failure::Network);
     }
     reset();
