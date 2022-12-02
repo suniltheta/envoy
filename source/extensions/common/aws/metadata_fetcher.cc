@@ -65,14 +65,25 @@ public:
     //   reset();
     //   return;
     // }
-    if (!Utility::addInternalClusterStatic(cm_, cluster_name_, host, "80")) {
-      ENVOY_LOG(error, "{}: fetch AWS Metadata failed: Failed to add [cluster = {}]", __func__,
+    // if (!Utility::addInternalClusterStatic(cm_, cluster_name_, "STATIC",
+    //                                        message.headers().getHostValue())) {
+    //   ENVOY_LOG(error, "{}: fetch AWS Metadata failed: Failed to add [cluster = {}]", __func__,
+    //             cluster_name_);
+    //   complete_ = true;
+    //   receiver_->onMetadataError(MetadataFetcher::MetadataReceiver::Failure::MissingConfig);
+    //   reset();
+    //   return;
+    // }
+
+    if (cm_.getThreadLocalCluster(cluster_name_) == nullptr) {
+      ENVOY_LOG(error, "{}: fetch AWS Metadata failed: [cluster = {}] not found", __func__,
                 cluster_name_);
       complete_ = true;
       receiver_->onMetadataError(MetadataFetcher::MetadataReceiver::Failure::MissingConfig);
       reset();
       return;
     }
+
     const auto thread_local_cluster = cm_.getThreadLocalCluster(cluster_name_);
 
     Http::RequestHeaderMapPtr headersPtr =

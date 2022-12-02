@@ -4,6 +4,7 @@
 
 #include "source/common/common/matchers.h"
 #include "source/common/http/headers.h"
+#include "source/common/http/utility.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -103,7 +104,7 @@ public:
    * @return false
    */
   static bool addInternalClusterStatic(Upstream::ClusterManager& cm, absl::string_view cluster_name,
-                                       absl::string_view host, absl::string_view port);
+                                       absl::string_view cluster_type, absl::string_view host);
 };
 
 } // namespace Aws

@@ -65,6 +65,7 @@ envoy_cc_library(
         "//envoy/api:api_interface",
         "//source/common/common:logger_lib",
         "//source/common/common:thread_lib",
+        "//source/common/init:target_lib",
         "//source/common/http:utility_lib",
         "//source/common/json:json_loader_lib",
         "//source/common/runtime:runtime_features_lib",
@@ -82,8 +83,9 @@ envoy_cc_library(
         "//envoy/upstream:cluster_manager_interface",
         "//source/common/common:empty_string",
         "//source/common/common:matchers_lib",
-        "//source/common/common:utility_lib",
+        "//source/common/common:utility_lib",        
         "//source/common/http:headers_lib",
+        "//source/common/http:utility_lib",
         "//source/common/runtime:runtime_features_lib",
     ],
 )

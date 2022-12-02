@@ -33,8 +33,6 @@ constexpr char AWS_EC2_METADATA_DISABLED[] = "AWS_EC2_METADATA_DISABLED";
 
 constexpr std::chrono::hours REFRESH_INTERVAL{1};
 constexpr std::chrono::seconds REFRESH_GRACE_PERIOD{5};
-constexpr char EC2_METADATA_HOST[] = "169.254.169.254:80";
-constexpr char CONTAINER_METADATA_HOST[] = "169.254.170.2:80";
 constexpr char SECURITY_CREDENTIALS_PATH[] = "/latest/meta-data/iam/security-credentials";
 
 constexpr char EC2_METADATA_CLUSTER[] = "ec2_instance_metadata_server_internal";
@@ -66,6 +64,13 @@ void MetadataCredentialsProviderBase::refreshIfNeeded() {
   if (needsRefresh()) {
     refresh();
   }
+}
+
+std::chrono::seconds MetadataCredentialsProviderBase::getCacheDuration() {
+  // TODO (suniltheta) This value should be configurable.
+  return std::chrono::seconds(
+      REFRESH_INTERVAL * 60 * 60 -
+      REFRESH_GRACE_PERIOD /*TODO: Add jitter from context.api().randomGenerator()*/);
 }
 
 bool InstanceProfileCredentialsProvider::needsRefresh() {
@@ -175,8 +180,22 @@ void InstanceProfileCredentialsProvider::extractCredentials(
             secret_access_key.empty() ? "" : "*****", AWS_SESSION_TOKEN,
             session_token.empty() ? "" : "*****");
 
-  cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
   last_updated_ = api_.timeSource().systemTime();
+  if (context_) {
+    setCredentialsToAllThreads(
+        std::move(std::make_unique<Credentials>(access_key_id, secret_access_key, session_token)));
+  } else {
+    cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
+  }
+  handleFetchDone();
+}
+
+void InstanceProfileCredentialsProvider::handleFetchDone() {
+  if (init_target_) {
+    init_target_->ready();
+    init_target_.reset();
+  }
+  cache_duration_timer_->enableTimer(cache_duration_);
 }
 
 void InstanceProfileCredentialsProvider::onMetadataSuccess(const std::string&& body) {
@@ -264,7 +283,21 @@ void TaskRoleCredentialsProvider::extractCredentials(
   }
 
   last_updated_ = api_.timeSource().systemTime();
-  cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
+  if (context_) {
+    setCredentialsToAllThreads(
+        std::move(std::make_unique<Credentials>(access_key_id, secret_access_key, session_token)));
+  } else {
+    cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
+  }
+  handleFetchDone();
+}
+
+void TaskRoleCredentialsProvider::handleFetchDone() {
+  if (init_target_) {
+    init_target_->ready();
+    init_target_.reset();
+  }
+  cache_duration_timer_->enableTimer(cache_duration_);
 }
 
 void TaskRoleCredentialsProvider::onMetadataSuccess(const std::string&& body) {
@@ -276,6 +309,7 @@ void TaskRoleCredentialsProvider::onMetadataSuccess(const std::string&& body) {
 void TaskRoleCredentialsProvider::onMetadataError(Failure) {
   // TODO (suniltheta) increment fetch failed stats
   ENVOY_LOG(error, "AWS credentials document fetch failure");
+  handleFetchDone();
 }
 
 Credentials CredentialsProviderChain::getCredentials() {
@@ -291,7 +325,7 @@ Credentials CredentialsProviderChain::getCredentials() {
 }
 
 DefaultCredentialsProviderChain::DefaultCredentialsProviderChain(
-    Api::Api& api, Upstream::ClusterManager& cm,
+    Api::Api& api, FactoryContextOptRef context, Upstream::ClusterManager& cm,
     const MetadataCredentialsProviderBase::FetchMetadataUsingCurl& fetch_metadata_using_curl,
     const CredentialsProviderChainFactories& factories) {
   ENVOY_LOG(debug, "Using environment credentials provider");
@@ -305,7 +339,7 @@ DefaultCredentialsProviderChain::DefaultCredentialsProviderChain(
   if (!relative_uri.empty()) {
     const auto uri = absl::StrCat(CONTAINER_METADATA_HOST, relative_uri);
     ENVOY_LOG(debug, "Using task role credentials provider with URI: {}", uri);
-    add(factories.createTaskRoleCredentialsProvider(api, cm, fetch_metadata_using_curl,
+    add(factories.createTaskRoleCredentialsProvider(api, context, cm, fetch_metadata_using_curl,
                                                     MetadataFetcher::create,
                                                     CONTAINER_METADATA_CLUSTER, uri));
   } else if (!full_uri.empty()) {
@@ -317,18 +351,19 @@ DefaultCredentialsProviderChain::DefaultCredentialsProviderChain(
                 "{} and authorization token",
                 full_uri);
       add(factories.createTaskRoleCredentialsProvider(
-          api, cm, fetch_metadata_using_curl, MetadataFetcher::create, CONTAINER_METADATA_CLUSTER,
-          full_uri, authorization_token));
+          api, context, cm, fetch_metadata_using_curl, MetadataFetcher::create,
+          CONTAINER_METADATA_CLUSTER, full_uri, authorization_token));
     } else {
       ENVOY_LOG(debug, "Using task role credentials provider with URI: {}", full_uri);
-      add(factories.createTaskRoleCredentialsProvider(api, cm, fetch_metadata_using_curl,
+      add(factories.createTaskRoleCredentialsProvider(api, context, cm, fetch_metadata_using_curl,
                                                       MetadataFetcher::create,
                                                       CONTAINER_METADATA_CLUSTER, full_uri));
     }
   } else if (metadata_disabled != TRUE) {
     ENVOY_LOG(debug, "Using instance profile credentials provider");
     add(factories.createInstanceProfileCredentialsProvider(
-        api, cm, fetch_metadata_using_curl, MetadataFetcher::create, EC2_METADATA_CLUSTER));
+        api, context, cm, fetch_metadata_using_curl, MetadataFetcher::create,
+        EC2_METADATA_CLUSTER));
   }
 }
 

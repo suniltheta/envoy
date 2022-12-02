@@ -284,30 +284,58 @@ absl::optional<std::string> Utility::fetchMetadata(Http::RequestMessage& message
 }
 
 bool Utility::addInternalClusterStatic(Upstream::ClusterManager& cm, absl::string_view cluster_name,
-                                       absl::string_view host, absl::string_view port) {
-
-  // Check if local cluster exists with that name
+                                       absl::string_view cluster_type, absl::string_view host) {
+  // Check if local cluster exists with that name.
   if (cm.getThreadLocalCluster(cluster_name) == nullptr) {
-    try {
-      envoy::config::cluster::v3::Cluster cluster;
-      constexpr static const char* kSockerAddress =
-          "\"socket_address\": {{\"address\": \"{}\",\"port_value\": \"{}\",}}";
+    // Make sure we run this on main thread
+    TRY_ASSERT_MAIN_THREAD {
+      try {
+        envoy::config::cluster::v3::Cluster cluster;
+        const auto host_attributes = Http::Utility::parseAuthority(host);
+        const auto host = host_attributes.host_;
+        if (!host_attributes.port_) {
+          ENVOY_LOG_MISC(
+              error, "Failed to add internal cluster with port value missing from host: {}", host);
+          return false;
+        }
+        const auto port = host_attributes.port_.value();
+        MessageUtil::loadFromYaml(fmt::format(R"EOF(
+name: {}
+type: {}
+connectTimeout: 2s
+lb_policy: ROUND_ROBIN
+loadAssignment:
+  clusterName: {}
+  endpoints:
+  - lbEndpoints:
+    - endpoint:
+        address:
+          socketAddress:
+            address: {}
+            portValue: {}
+typed_extension_protocol_options:
+  envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+    "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+    explicit_http_config:
+      http_protocol_options:
+        accept_http_10: true
+  )EOF",
+                                              cluster_name, cluster_type, cluster_name, host, port),
+                                  cluster, ProtobufMessage::getNullValidationVisitor());
 
-      constexpr static const char* kStaticCluster =
-          "{{\"name\": \"{}\",\"connect_timeout\": \"1s\",\"type\": \"static\",\"lb_policy\": "
-          "\"round_robin\",\"load_assignment\": {{\"endpoints\": [{{\"lb_endpoints\": "
-          "[{{\"endpoint\": {{\"address\": {{{},              }}}}}}]}}]}}}}";
-
-      MessageUtil::loadFromJson(
-          fmt::format(kStaticCluster, cluster_name, fmt::format(kSockerAddress, host, port)),
-          cluster, ProtobufMessage::getNullValidationVisitor());
-      cm.addOrUpdateCluster(cluster, "12345");
-      ENVOY_LOG_MISC(info,
-                     "Added a static internal cluster [name: {}, address:{}:{}] to fetch aws "
-                     "credentials: {}",
-                     cluster_name, host, port);
-    } catch (EnvoyException& e) {
-      ENVOY_LOG_MISC(error, "Error parsing json body, received exception: {}", e.what());
+        cm.addOrUpdateCluster(cluster, "12345");
+        ENVOY_LOG_MISC(info,
+                       "Added a {} internal cluster [name: {}, address:{}:{}] to fetch aws "
+                       "credentials",
+                       cluster_type, cluster_name, host, port);
+      } catch (EnvoyException& e) {
+        ENVOY_LOG_MISC(error, "Error parsing json body, received exception: {}", e.what());
+        return false;
+      }
+    }
+    END_TRY
+    catch (const EnvoyException& e) {
+      ENVOY_LOG_MISC(error, "{}: {}", cluster_name, e.what());
       return false;
     }
   }

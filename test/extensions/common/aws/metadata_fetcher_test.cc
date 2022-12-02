@@ -142,6 +142,8 @@ TEST_F(MetadataFetcherTest, TestHttpFailure) {
   fetcher_->fetch(message, parent_span_, receiver);
 }
 
+// TODO: Add below 2 tests on credentials_provider_impl_test.cc
+/*
 TEST_F(MetadataFetcherTest, TestAddMissingCluster) {
   // Setup without thread local cluster yet
   Http::RequestMessageImpl message;
@@ -206,6 +208,21 @@ TEST_F(MetadataFetcherTest, TestClusterAddFail) {
       .WillOnce(Return(nullptr));
   EXPECT_CALL(mock_factory_ctx_.cluster_manager_, addOrUpdateCluster(WithName("cluster_name"), _))
       .WillOnce(Throw(EnvoyException("exeption message")));
+  EXPECT_CALL(receiver, onMetadataSuccess(testing::_)).Times(0);
+  EXPECT_CALL(receiver, onMetadataError(MetadataFetcher::MetadataReceiver::Failure::MissingConfig));
+
+  // Act
+  fetcher_->fetch(message, parent_span_, receiver);
+}*/
+
+TEST_F(MetadataFetcherTest, TestClusterNotFound) {
+  // Setup without thread local cluster
+  fetcher_ = MetadataFetcher::create(mock_factory_ctx_.cluster_manager_, "cluster_name");
+  Http::RequestMessageImpl message;
+  MockMetadataReceiver receiver;
+
+  EXPECT_CALL(mock_factory_ctx_.cluster_manager_, getThreadLocalCluster(_))
+      .WillOnce(Return(nullptr));
   EXPECT_CALL(receiver, onMetadataSuccess(testing::_)).Times(0);
   EXPECT_CALL(receiver, onMetadataError(MetadataFetcher::MetadataReceiver::Failure::MissingConfig));
 
