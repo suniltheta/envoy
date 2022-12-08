@@ -229,6 +229,7 @@ static size_t curlCallback(char* ptr, size_t, size_t nmemb, void* data) {
 }
 
 absl::optional<std::string> Utility::fetchMetadata(Http::RequestMessage& message) {
+  ENVOY_LOG_MISC(trace, "{}", __func__);
   static const size_t MAX_RETRIES = 4;
   static const std::chrono::milliseconds RETRY_DELAY{1000};
   static const std::chrono::seconds TIMEOUT{5};
@@ -285,6 +286,7 @@ absl::optional<std::string> Utility::fetchMetadata(Http::RequestMessage& message
 
 bool Utility::addInternalClusterStatic(Upstream::ClusterManager& cm, absl::string_view cluster_name,
                                        absl::string_view cluster_type, absl::string_view host) {
+  ENVOY_LOG_MISC(trace, __func__);
   // Check if local cluster exists with that name.
   if (cm.getThreadLocalCluster(cluster_name) == nullptr) {
     // Make sure we run this on main thread

@@ -478,7 +478,7 @@ public:
   // Fake/mock infrastructure for Grpc::AsyncClientImpl upstream.
   Upstream::ClusterConnectivityState state_;
   Network::TransportSocketPtr async_client_transport_socket_{new Network::RawBufferSocket()};
-  Upstream::MockClusterManager cm_;
+  NiceMock<Upstream::MockClusterManager> cm_;
   NiceMock<LocalInfo::MockLocalInfo> local_info_;
   Runtime::MockLoader runtime_;
   Extensions::TransportSockets::Tls::ContextManagerImpl context_manager_{test_time_.timeSystem()};

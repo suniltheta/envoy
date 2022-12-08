@@ -24,7 +24,6 @@ public:
   explicit Credentials(absl::string_view access_key_id = absl::string_view(),
                        absl::string_view secret_access_key = absl::string_view(),
                        absl::string_view session_token = absl::string_view()) {
-    // TODO(suniltheta): Move credential expiration date in here
     if (!access_key_id.empty()) {
       access_key_id_ = std::string(access_key_id);
       if (!secret_access_key.empty()) {
@@ -68,6 +67,8 @@ public:
   virtual Credentials getCredentials() PURE;
 };
 
+using CredentialsConstSharedPtr = std::shared_ptr<const Credentials>;
+using CredentialsConstUniquePtr = std::unique_ptr<const Credentials>;
 using CredentialsProviderSharedPtr = std::shared_ptr<CredentialsProvider>;
 
 } // namespace Aws

@@ -16,7 +16,7 @@ namespace Aws {
 namespace {
 
 class MetadataFetcherImpl : public MetadataFetcher,
-                            public Logger::Loggable<Logger::Id::filter>,
+                            public Logger::Loggable<Logger::Id::aws>,
                             public Http::AsyncClient::Callbacks {
 
 public:
@@ -75,16 +75,14 @@ public:
     //   return;
     // }
 
-    if (cm_.getThreadLocalCluster(cluster_name_) == nullptr) {
-      ENVOY_LOG(error, "{}: fetch AWS Metadata failed: [cluster = {}] not found", __func__,
-                cluster_name_);
+    const auto thread_local_cluster = cm_.getThreadLocalCluster(cluster_name_);
+    if (thread_local_cluster == nullptr) {
+      ENVOY_LOG(error, "{} AWS Metadata failed: [cluster = {}] not found", __func__, cluster_name_);
       complete_ = true;
       receiver_->onMetadataError(MetadataFetcher::MetadataReceiver::Failure::MissingConfig);
       reset();
       return;
     }
-
-    const auto thread_local_cluster = cm_.getThreadLocalCluster(cluster_name_);
 
     Http::RequestHeaderMapPtr headersPtr =
         Envoy::Http::createHeaderMap<Envoy::Http::RequestHeaderMapImpl>(

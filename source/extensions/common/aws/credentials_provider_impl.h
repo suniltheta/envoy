@@ -39,10 +39,6 @@ constexpr char CONTAINER_METADATA_HOST[] = "169.254.170.2:80";
  */
 using CreateMetadataFetcherCb =
     std::function<MetadataFetcherPtr(Upstream::ClusterManager&, absl::string_view)>;
-
-using CredentialsConstSharedPtr = std::shared_ptr<const Credentials>;
-using CredentialsConstUniquePtr = std::unique_ptr<const Credentials>;
-
 using FactoryContextOptRef = OptRef<Server::Configuration::FactoryContext>;
 
 /**
@@ -72,13 +68,16 @@ public:
         fetch_metadata_using_curl_(fetch_metadata_using_curl),
         create_metadata_fetcher_cb_(create_metadata_fetcher_cb),
         cluster_name_(std::string(cluster_name)), cache_duration_(getCacheDuration()),
-        debug_name_(absl::StrCat("Fetching aws credentials from cluster=", cluster_name)) {
-    if (context_) {
+        debug_name_(absl::StrCat("Fetching aws credentials from cluster=", cluster_name)),
+        use_libcurl_(Runtime::runtimeFeatureEnabled(
+            "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
+
+    if (!use_libcurl_ && context_) {
       context_->mainThreadDispatcher().post([this, host]() {
         if (!Utility::addInternalClusterStatic(cm_, cluster_name_, "STATIC", host)) {
-          ENVOY_LOG(error, "{}: Failed to add [STATIC cluster = {} with address = {}]", __func__,
-                    cluster_name_, host);
-          return;
+          throw EnvoyException(fmt::format(
+              "Failed to add [STATIC cluster = {} with address = {}] or cluster not found",
+              cluster_name_, host));
         }
       });
 
@@ -100,17 +99,15 @@ public:
     }
   }
 
-  Credentials getCredentials() override {
-    refreshIfNeeded();
-    if (context_ && tls_) {
-      // If factor context was supplied then we would have thread local slot initialized.
-      return *(*tls_)->credentials_.get();
-    } else {
-      return cached_credentials_;
-    }
-  }
+  Credentials getCredentials() override;
 
   const std::string& clusterName() { return cluster_name_; }
+
+  // Handle fetch done.
+  void handleFetchDone();
+
+  // Get the Metadata credentials cache duration.
+  static std::chrono::seconds getCacheDuration();
 
 protected:
   struct ThreadLocalCredentialsCache : public ThreadLocal::ThreadLocalObject {
@@ -164,12 +161,12 @@ protected:
   // Used in logs.
   const std::string debug_name_;
 
+  const bool use_libcurl_;
+
   void refreshIfNeeded();
 
   virtual bool needsRefresh() PURE;
   virtual void refresh() PURE;
-  // Get the Metadata credentials cache duration.
-  static std::chrono::seconds getCacheDuration();
 };
 
 /**
@@ -189,13 +186,11 @@ public:
                                         create_metadata_fetcher_cb, cluster_name,
                                         EC2_METADATA_HOST) {
     // Fetch the credentials as we are not registering with init manager.
-    if (!context) {
+    if (!use_libcurl_ && !context_) {
       refresh();
     }
   }
 
-  // Handle fetch done.
-  void handleFetchDone();
   // Following functions are for MetadataFetcher::MetadataReceiver interface
   void onMetadataSuccess(const std::string&& body) override;
   void onMetadataError(Failure reason) override;
@@ -203,7 +198,10 @@ public:
 private:
   bool needsRefresh() override;
   void refresh() override;
-  void extractCredentials(const std::string&& credential_document_value);
+  void extractCredentials(const std::string&& credential_document_value, bool async = false);
+  void extractCredentialsAsync(const std::string&& credential_document_value) {
+    extractCredentials(std::move(credential_document_value), true);
+  }
   void fetchCredentialFromInstanceRole(const std::string&& instance_role, bool async = false);
   void fetchCredentialFromInstanceRoleAsync(const std::string&& instance_role) {
     fetchCredentialFromInstanceRole(std::move(instance_role), true);
@@ -227,16 +225,14 @@ public:
                               absl::string_view cluster_name = {})
       : MetadataCredentialsProviderBase(api, context, cm, fetch_metadata_using_curl,
                                         create_metadata_fetcher_cb, cluster_name,
-                                        CONTAINER_METADATA_IP),
+                                        CONTAINER_METADATA_HOST),
         credential_uri_(credential_uri), authorization_token_(authorization_token) {
     // Fetch the credentials as we are not registering with init manager.
-    if (!context) {
+    if (!use_libcurl_ && !context_) {
       refresh();
     }
   }
 
-  // Handle fetch done.
-  void handleFetchDone();
   // Following functions are for MetadataFetcher::MetadataReceiver interface
   void onMetadataSuccess(const std::string&& body) override;
   void onMetadataError(Failure reason) override;
@@ -331,6 +327,9 @@ private:
         api, context, cm, fetch_metadata_using_curl, create_metadata_fetcher_cb, cluster_name);
   }
 };
+
+using InstanceProfileCredentialsProviderPtr = std::shared_ptr<InstanceProfileCredentialsProvider>;
+using TaskRoleCredentialsProviderPtr = std::shared_ptr<TaskRoleCredentialsProvider>;
 
 } // namespace Aws
 } // namespace Common
