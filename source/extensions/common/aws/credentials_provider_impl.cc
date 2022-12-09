@@ -227,7 +227,7 @@ void InstanceProfileCredentialsProvider::extractCredentials(
   last_updated_ = api_.timeSource().systemTime();
   if (!use_libcurl_ && context_) {
     setCredentialsToAllThreads(
-        std::move(std::make_unique<Credentials>(access_key_id, secret_access_key, session_token)));
+        std::make_unique<Credentials>(access_key_id, secret_access_key, session_token));
   } else {
     cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
   }
@@ -330,7 +330,7 @@ void TaskRoleCredentialsProvider::extractCredentials(
   last_updated_ = api_.timeSource().systemTime();
   if (!use_libcurl_ && context_) {
     setCredentialsToAllThreads(
-        std::move(std::make_unique<Credentials>(access_key_id, secret_access_key, session_token)));
+        std::make_unique<Credentials>(access_key_id, secret_access_key, session_token));
   } else {
     cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
   }
