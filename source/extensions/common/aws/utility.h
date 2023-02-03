@@ -4,6 +4,7 @@
 
 #include "source/common/common/matchers.h"
 #include "source/common/http/headers.h"
+#include "source/common/http/utility.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -92,6 +93,18 @@ public:
    * gRPC auth plugins that are able to schedule blocking plugins on a different thread.
    */
   static absl::optional<std::string> fetchMetadata(Http::RequestMessage& message);
+
+  /**
+   * @brief Add an internal static cluster
+   * @param cm
+   * @param cluster_name
+   * @param host
+   * @param port
+   * @return true
+   * @return false
+   */
+  static bool addInternalClusterStatic(Upstream::ClusterManager& cm, absl::string_view cluster_name,
+                                       absl::string_view cluster_type, absl::string_view host);
 };
 
 } // namespace Aws
