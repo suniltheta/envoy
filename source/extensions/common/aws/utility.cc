@@ -1,13 +1,18 @@
 #include "source/extensions/common/aws/utility.h"
 
+#include "envoy/upstream/cluster_manager.h"
+
 #include "source/common/common/empty_string.h"
 #include "source/common/common/fmt.h"
 #include "source/common/common/utility.h"
+#include "source/common/protobuf/message_validator_impl.h"
+#include "source/common/protobuf/utility.h"
 
 #include "absl/strings/match.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "curl/curl.h"
+#include "fmt/printf.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -224,6 +229,7 @@ static size_t curlCallback(char* ptr, size_t, size_t nmemb, void* data) {
 }
 
 absl::optional<std::string> Utility::fetchMetadata(Http::RequestMessage& message) {
+  ENVOY_LOG_MISC(trace, "{}", __func__);
   static const size_t MAX_RETRIES = 4;
   static const std::chrono::milliseconds RETRY_DELAY{1000};
   static const std::chrono::seconds TIMEOUT{5};
@@ -236,8 +242,9 @@ absl::optional<std::string> Utility::fetchMetadata(Http::RequestMessage& message
   const auto host = message.headers().getHostValue();
   const auto path = message.headers().getPathValue();
   const auto method = message.headers().getMethodValue();
+  const auto scheme = message.headers().getSchemeValue();
 
-  const std::string url = fmt::format("http://{}{}", host, path);
+  const std::string url = fmt::format("{}://{}{}", scheme, host, path);
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(curl, CURLOPT_TIMEOUT, TIMEOUT.count());
   curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
@@ -292,6 +299,66 @@ absl::optional<std::string> Utility::fetchMetadata(Http::RequestMessage& message
   curl_slist_free_all(headers);
 
   return buffer.empty() ? absl::nullopt : absl::optional<std::string>(buffer);
+}
+
+bool Utility::addInternalClusterStatic(Upstream::ClusterManager& cm, absl::string_view cluster_name,
+                                       absl::string_view cluster_type, absl::string_view host) {
+  ENVOY_LOG_MISC(trace, __func__);
+  // Check if local cluster exists with that name.
+  if (cm.getThreadLocalCluster(cluster_name) == nullptr) {
+    // Make sure we run this on main thread
+    TRY_ASSERT_MAIN_THREAD {
+      try {
+        envoy::config::cluster::v3::Cluster cluster;
+        const auto host_attributes = Http::Utility::parseAuthority(host);
+        const auto host = host_attributes.host_;
+        if (!host_attributes.port_) {
+          ENVOY_LOG_MISC(
+              error, "Failed to add internal cluster with port value missing from host: {}", host);
+          return false;
+        }
+        const auto port = host_attributes.port_.value();
+        MessageUtil::loadFromYaml(fmt::format(R"EOF(
+name: {}
+type: {}
+connectTimeout: 2s
+lb_policy: ROUND_ROBIN
+loadAssignment:
+  clusterName: {}
+  endpoints:
+  - lbEndpoints:
+    - endpoint:
+        address:
+          socketAddress:
+            address: {}
+            portValue: {}
+typed_extension_protocol_options:
+  envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+    "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+    explicit_http_config:
+      http_protocol_options:
+        accept_http_10: true
+  )EOF",
+                                              cluster_name, cluster_type, cluster_name, host, port),
+                                  cluster, ProtobufMessage::getNullValidationVisitor());
+
+        cm.addOrUpdateCluster(cluster, "12345");
+        ENVOY_LOG_MISC(info,
+                       "Added a {} internal cluster [name: {}, address:{}:{}] to fetch aws "
+                       "credentials",
+                       cluster_type, cluster_name, host, port);
+      } catch (EnvoyException& e) {
+        ENVOY_LOG_MISC(error, "Error parsing json body, received exception: {}", e.what());
+        return false;
+      }
+    }
+    END_TRY
+    catch (const EnvoyException& e) {
+      ENVOY_LOG_MISC(error, "{}: {}", cluster_name, e.what());
+      return false;
+    }
+  }
+  return true;
 }
 
 } // namespace Aws

@@ -241,6 +241,7 @@ hls
 integrations
 jkl
 lang
+libcurl
 libsxg
 LLVM
 LPT
