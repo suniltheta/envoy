@@ -326,6 +326,7 @@ public:
     Http::TestRequestHeaderMapImpl headers{{":path", "/latest/api/token"},
                                            {":authority", "169.254.169.254:80"},
                                            {":method", "PUT"},
+                                           {":scheme", "http"},
                                            {"X-aws-ec2-metadata-token-ttl-seconds", "21600"}};
     EXPECT_CALL(fetch_metadata_, fetch(messageMatches(headers))).WillOnce(Return(token));
   }
@@ -334,6 +335,7 @@ public:
     Http::TestRequestHeaderMapImpl headers{{":path", "/latest/api/token"},
                                            {":authority", "169.254.169.254:80"},
                                            {":method", "PUT"},
+                                           {":scheme", "http"},
                                            {"X-aws-ec2-metadata-token-ttl-seconds", "21600"}};
     EXPECT_CALL(*raw_metadata_fetcher_, fetch(messageMatches(headers), _, _))
         .WillRepeatedly(
@@ -355,6 +357,7 @@ public:
     Http::TestRequestHeaderMapImpl headers{{":path", "/latest/meta-data/iam/security-credentials"},
                                            {":authority", "169.254.169.254:80"},
                                            {":method", "GET"},
+                                           {":scheme", "http"},
                                            {"X-aws-ec2-metadata-token", "TOKEN"}};
     EXPECT_CALL(fetch_metadata_, fetch(messageMatches(headers))).WillOnce(Return(listing));
   }
@@ -400,6 +403,7 @@ public:
         {":path", "/latest/meta-data/iam/security-credentials/doc1"},
         {":authority", "169.254.169.254:80"},
         {":method", "GET"},
+        {":scheme", "http"},
         {"X-aws-ec2-metadata-token", "TOKEN"}};
     EXPECT_CALL(fetch_metadata_, fetch(messageMatches(headers))).WillOnce(Return(document));
   }
@@ -482,10 +486,11 @@ typed_extension_protocol_options:
   EXPECT_CALL(cluster_manager_, addOrUpdateCluster(WithAttribute(expected_cluster), _))
       .WillOnce(Return(true));
 
-  expectCredentialListingHttpAsync(std::move(std::string("doc1")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
-  expectDocumentHttpAsync(std::move(R"EOF(
+  expectSessionTokenHttpAsync(std::move("TOKEN"));
+  expectCredentialListingHttpAsyncSecure(std::move(std::string("doc1")));
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  expectDocumentHttpAsyncSecure(std::move(R"EOF(
  {
    "AccessKeyId": "akid",
    "SecretAccessKey": "secret",
@@ -517,11 +522,13 @@ TEST_F(InstanceProfileCredentialsProviderTest, FailedCredentialListingUnsecure) 
   expectCredentialListingHttpAsync(std::move(std::string()));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
-  setupProviderWithContext();
-  // Cancel is called once for fetching once again as previous attempt wasn't a success.
+  // Cancel is called once.
   EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  // Expect refresh timer to be started.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
   // Expect refresh timer to be stopped and started.
   EXPECT_CALL(*timer_, disableTimer());
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
@@ -538,11 +545,13 @@ TEST_F(InstanceProfileCredentialsProviderTest, FailedCredentialListingSecure) {
   expectCredentialListingHttpAsyncSecure(std::move(std::string()));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
-  setupProviderWithContext();
-  // Cancel is called once for fetching once again as previous attempt wasn't a success.
+  // Cancel is called once.
   EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
   // Expect refresh timer to be stopped and started.
   EXPECT_CALL(*timer_, disableTimer());
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
@@ -559,11 +568,13 @@ TEST_F(InstanceProfileCredentialsProviderTest, EmptyCredentialListingUnsecure) {
   expectCredentialListingHttpAsync(std::move(std::string("")));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  // Cancel is called once.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
   // Cancel is called once for fetching once again as previous attempt wasn't a success.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
   // Expect refresh timer to be stopped and started.
   EXPECT_CALL(*timer_, disableTimer());
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
@@ -580,11 +591,13 @@ TEST_F(InstanceProfileCredentialsProviderTest, EmptyCredentialListingSecure) {
   expectCredentialListingHttpAsyncSecure(std::move(std::string("")));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
-  setupProviderWithContext();
-  // Cancel is called once for fetching once again as previous attempt wasn't a success.
+  // Cancel is called once.
   EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
   // Expect refresh timer to be stopped and started.
   EXPECT_CALL(*timer_, disableTimer());
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
@@ -599,16 +612,16 @@ TEST_F(InstanceProfileCredentialsProviderTest, MissingDocumentUnsecure) {
   timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
   expectSessionTokenHttpAsync(std::move(std::string()));
   expectCredentialListingHttpAsync(std::move(std::string("doc1\ndoc2\ndoc3")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsync(std::move(std::string()));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
-  setupProviderWithContext();
-  // Cancel is called twice for fetching once again as previous attempt wasn't a success.
+  // Cancel is called twice.
   EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+  // Cancel is called thrice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(3);
   // Expect refresh timer to be stopped and started.
   EXPECT_CALL(*timer_, disableTimer());
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
@@ -623,16 +636,16 @@ TEST_F(InstanceProfileCredentialsProviderTest, MissingDocumentSecure) {
   timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
   expectSessionTokenHttpAsync(std::move("TOKEN"));
   expectCredentialListingHttpAsyncSecure(std::move(std::string("doc1\ndoc2\ndoc3")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsyncSecure(std::move(std::string()));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
-  setupProviderWithContext();
-  // Cancel is called twice for fetching once again as previous attempt wasn't a success.
+  // Cancel is called twice.
   EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+  // Cancel is called thrice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(3);
   // Expect refresh timer to be stopped and started.
   EXPECT_CALL(*timer_, disableTimer());
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
@@ -647,18 +660,18 @@ TEST_F(InstanceProfileCredentialsProviderTest, MalformedDocumentUnsecure) {
   timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
   expectSessionTokenHttpAsync(std::move(std::string()));
   expectCredentialListingHttpAsync(std::move(std::string("doc1")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsync(std::move(R"EOF(
  not json
  )EOF"));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
-  setupProviderWithContext();
-  // Cancel is called twice for fetching once again as previous attempt wasn't a success.
+  // Cancel is called twice.
   EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+  // Cancel is called thrice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(3);
   // Expect refresh timer to be stopped and started.
   EXPECT_CALL(*timer_, disableTimer());
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
@@ -673,18 +686,18 @@ TEST_F(InstanceProfileCredentialsProviderTest, MalformedDocumentSecure) {
   timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
   expectSessionTokenHttpAsync(std::move("TOKEN"));
   expectCredentialListingHttpAsyncSecure(std::move(std::string("doc1")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsyncSecure(std::move(R"EOF(
  not json
  )EOF"));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
-  setupProviderWithContext();
-  // Cancel is called twice for fetching once again as previous attempt wasn't a success.
+  // Cancel is called twice.
   EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+  // Cancel is called thrice
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(3);
   // Expect refresh timer to be stopped and started.
   EXPECT_CALL(*timer_, disableTimer());
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
@@ -699,8 +712,6 @@ TEST_F(InstanceProfileCredentialsProviderTest, EmptyValuesUnsecure) {
   timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
   expectSessionTokenHttpAsync(std::move(std::string()));
   expectCredentialListingHttpAsync(std::move(std::string("doc1")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsync(std::move(R"EOF(
  {
    "AccessKeyId": "",
@@ -710,8 +721,10 @@ TEST_F(InstanceProfileCredentialsProviderTest, EmptyValuesUnsecure) {
  )EOF"));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
   // Cancel is not called again as we don't expect any more call to fetch until timeout.
   EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(0);
@@ -728,8 +741,6 @@ TEST_F(InstanceProfileCredentialsProviderTest, EmptyValuesSecure) {
   timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
   expectSessionTokenHttpAsync(std::move("TOKEN"));
   expectCredentialListingHttpAsyncSecure(std::move(std::string("doc1")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsyncSecure(std::move(R"EOF(
  {
    "AccessKeyId": "",
@@ -739,8 +750,10 @@ TEST_F(InstanceProfileCredentialsProviderTest, EmptyValuesSecure) {
  )EOF"));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
   // Cancel is not called again as we don't expect any more call to fetch until timeout.
   EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(0);
@@ -757,8 +770,6 @@ TEST_F(InstanceProfileCredentialsProviderTest, FullCachedCredentialsUnsecure) {
   timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
   expectSessionTokenHttpAsync(std::move(std::string()));
   expectCredentialListingHttpAsync(std::move(std::string("doc1")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsync(std::move(R"EOF(
  {
    "AccessKeyId": "akid",
@@ -768,8 +779,10 @@ TEST_F(InstanceProfileCredentialsProviderTest, FullCachedCredentialsUnsecure) {
  )EOF"));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
 
   // init_watcher ready is not called again.
@@ -806,8 +819,6 @@ TEST_F(InstanceProfileCredentialsProviderTest, FullCachedCredentialsSecure) {
   timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
   expectSessionTokenHttpAsync(std::move("TOKEN"));
   expectCredentialListingHttpAsyncSecure(std::move(std::string("doc1")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsyncSecure(std::move(R"EOF(
  {
    "AccessKeyId": "akid",
@@ -817,8 +828,10 @@ TEST_F(InstanceProfileCredentialsProviderTest, FullCachedCredentialsSecure) {
  )EOF"));
   // init_watcher ready is called.
   init_watcher_.expectReady();
-  // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  // Expect refresh timer to be started after fetch done from init.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
 
   // init_watcher ready is not called again.
@@ -854,8 +867,6 @@ TEST_F(InstanceProfileCredentialsProviderTest, FullCachedCredentialsWithNullCont
   // refresh() will be called on initialization.
   expectSessionTokenHttpAsync(std::move(std::string()));
   expectCredentialListingHttpAsync(std::move(std::string("doc1")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsync(std::move(R"EOF(
  {
    "AccessKeyId": "akid",
@@ -863,7 +874,8 @@ TEST_F(InstanceProfileCredentialsProviderTest, FullCachedCredentialsWithNullCont
    "Token": "token"
  }
  )EOF"));
-
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
   setupProviderWithNullContext();
 
   // Cancel won't be called again.
@@ -886,8 +898,6 @@ TEST_F(InstanceProfileCredentialsProviderTest, FullCachedCredentialsWithNullCont
   // refresh() will be called on initialization.
   expectSessionTokenHttpAsync(std::move("TOKEN"));
   expectCredentialListingHttpAsyncSecure(std::move(std::string("doc1")));
-  // Cancel is called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsyncSecure(std::move(R"EOF(
  {
    "AccessKeyId": "akid",
@@ -895,7 +905,8 @@ TEST_F(InstanceProfileCredentialsProviderTest, FullCachedCredentialsWithNullCont
    "Token": "token"
  }
  )EOF"));
-
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
   setupProviderWithNullContext();
 
   // Cancel won't be called again.
@@ -919,8 +930,6 @@ TEST_F(InstanceProfileCredentialsProviderTest, RefreshOnCredentialExpirationUnse
   timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
   expectSessionTokenHttpAsync(std::move(std::string()));
   expectCredentialListingHttpAsync(std::move(std::string("doc1")));
-  // Cancel will be called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsync(std::move(R"EOF(
  {
    "AccessKeyId": "akid",
@@ -930,6 +939,8 @@ TEST_F(InstanceProfileCredentialsProviderTest, RefreshOnCredentialExpirationUnse
  )EOF"));
   // init_watcher ready is called.
   init_watcher_.expectReady();
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
   // Expect refresh timer to be started.
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
   setupProviderWithContext();
@@ -960,8 +971,8 @@ TEST_F(InstanceProfileCredentialsProviderTest, RefreshOnCredentialExpirationUnse
 
   // Expect timer to have expired but we would re-start the timer eventually after refresh.
   EXPECT_CALL(*timer_, disableTimer()).Times(0);
-  // Cancel will be called twice back to back.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  // Cancel will be called thrice back to back to back.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(3);
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
   time_system_.advanceTimeWait(std::chrono::minutes(61));
   timer_->invokeCallback();
@@ -984,8 +995,6 @@ TEST_F(InstanceProfileCredentialsProviderTest, RefreshOnCredentialExpirationSecu
   timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
   expectSessionTokenHttpAsync(std::move("TOKEN"));
   expectCredentialListingHttpAsyncSecure(std::move(std::string("doc1")));
-  // Cancel will be called once.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
   expectDocumentHttpAsyncSecure(std::move(R"EOF(
  {
    "AccessKeyId": "akid",
@@ -995,6 +1004,8 @@ TEST_F(InstanceProfileCredentialsProviderTest, RefreshOnCredentialExpirationSecu
  )EOF"));
   // init_watcher ready is called.
   init_watcher_.expectReady();
+  // Cancel is called twice.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
   // Expect refresh timer to be started.
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
   setupProviderWithContext();
@@ -1025,8 +1036,8 @@ TEST_F(InstanceProfileCredentialsProviderTest, RefreshOnCredentialExpirationSecu
 
   // Expect timer to have expired but we would re-start the timer eventually after refresh.
   EXPECT_CALL(*timer_, disableTimer()).Times(0);
-  // Cancel will be called twice back to back.
-  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(2);
+  // Cancel will be called thrice back to back to back.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(3);
   EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
   time_system_.advanceTimeWait(std::chrono::minutes(61));
   timer_->invokeCallback();
@@ -1060,7 +1071,7 @@ TEST_F(InstanceProfileCredentialsProviderTest, FailedCredentialListingCurlSecure
   setupProviderWithLibcurl();
   expectSessionTokenCurl("TOKEN");
   expectCredentialListingCurlSecure(absl::optional<std::string>());
-  const auto credentials = provider_.getCredentials();
+  const auto credentials = provider_->getCredentials();
   EXPECT_FALSE(credentials.accessKeyId().has_value());
   EXPECT_FALSE(credentials.secretAccessKey().has_value());
   EXPECT_FALSE(credentials.sessionToken().has_value());
@@ -1080,7 +1091,7 @@ TEST_F(InstanceProfileCredentialsProviderTest, EmptyCredentialListingCurlSecure)
   setupProviderWithLibcurl();
   expectSessionTokenCurl("TOKEN");
   expectCredentialListingCurlSecure("");
-  const auto credentials = provider_.getCredentials();
+  const auto credentials = provider_->getCredentials();
   EXPECT_FALSE(credentials.accessKeyId().has_value());
   EXPECT_FALSE(credentials.secretAccessKey().has_value());
   EXPECT_FALSE(credentials.sessionToken().has_value());
@@ -1102,7 +1113,7 @@ TEST_F(InstanceProfileCredentialsProviderTest, MissingDocumentCurlSecure) {
   expectSessionTokenCurl("TOKEN");
   expectCredentialListingCurlSecure("doc1\ndoc2\ndoc3");
   expectDocumentCurlSecure(absl::optional<std::string>());
-  const auto credentials = provider_.getCredentials();
+  const auto credentials = provider_->getCredentials();
   EXPECT_FALSE(credentials.accessKeyId().has_value());
   EXPECT_FALSE(credentials.secretAccessKey().has_value());
   EXPECT_FALSE(credentials.sessionToken().has_value());
@@ -1128,7 +1139,7 @@ TEST_F(InstanceProfileCredentialsProviderTest, MalformedDocumentCurlSecure) {
   expectDocumentCurlSecure(R"EOF(
 not json
 )EOF");
-  const auto credentials = provider_.getCredentials();
+  const auto credentials = provider_->getCredentials();
   EXPECT_FALSE(credentials.accessKeyId().has_value());
   EXPECT_FALSE(credentials.secretAccessKey().has_value());
   EXPECT_FALSE(credentials.sessionToken().has_value());
@@ -1162,7 +1173,7 @@ TEST_F(InstanceProfileCredentialsProviderTest, EmptyValuesCurlSecure) {
   "Token": ""
 }
 )EOF");
-  const auto credentials = provider_.getCredentials();
+  const auto credentials = provider_->getCredentials();
   EXPECT_FALSE(credentials.accessKeyId().has_value());
   EXPECT_FALSE(credentials.secretAccessKey().has_value());
   EXPECT_FALSE(credentials.sessionToken().has_value());
@@ -1200,11 +1211,11 @@ TEST_F(InstanceProfileCredentialsProviderTest, FullCachedCredentialsCurlSecure) 
   "Token": "token"
 }
 )EOF");
-  const auto credentials = provider_.getCredentials();
+  const auto credentials = provider_->getCredentials();
   EXPECT_EQ("akid", credentials.accessKeyId().value());
   EXPECT_EQ("secret", credentials.secretAccessKey().value());
   EXPECT_EQ("token", credentials.sessionToken().value());
-  const auto cached_credentials = provider_.getCredentials();
+  const auto cached_credentials = provider_->getCredentials();
   EXPECT_EQ("akid", cached_credentials.accessKeyId().value());
   EXPECT_EQ("secret", cached_credentials.secretAccessKey().value());
   EXPECT_EQ("token", cached_credentials.sessionToken().value());
@@ -1254,7 +1265,7 @@ TEST_F(InstanceProfileCredentialsProviderTest, CredentialExpirationCurlSecure) {
   "Token": "token"
 }
 )EOF");
-  const auto credentials = provider_.getCredentials();
+  const auto credentials = provider_->getCredentials();
   EXPECT_EQ("akid", credentials.accessKeyId().value());
   EXPECT_EQ("secret", credentials.secretAccessKey().value());
   EXPECT_EQ("token", credentials.sessionToken().value());
@@ -1268,7 +1279,7 @@ TEST_F(InstanceProfileCredentialsProviderTest, CredentialExpirationCurlSecure) {
   "Token": "new_token"
 }
 )EOF");
-  const auto new_credentials = provider_.getCredentials();
+  const auto new_credentials = provider_->getCredentials();
   EXPECT_EQ("new_akid", new_credentials.accessKeyId().value());
   EXPECT_EQ("new_secret", new_credentials.secretAccessKey().value());
   EXPECT_EQ("new_token", new_credentials.sessionToken().value());
@@ -1427,7 +1438,7 @@ TEST_F(TaskRoleCredentialsProviderTest, FailedFetchingDocument) {
   // init_watcher ready is called.
   init_watcher_.expectReady();
   // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
 
   // Cancel is called for fetching once again as previous attempt wasn't a success.
@@ -1452,7 +1463,7 @@ not json
   // init_watcher ready is called.
   init_watcher_.expectReady();
   // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
 
   // Cancel is called for fetching once again as previous attempt wasn't a success.
@@ -1482,7 +1493,7 @@ TEST_F(TaskRoleCredentialsProviderTest, EmptyValues) {
   // init_watcher ready is called.
   init_watcher_.expectReady();
   // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
 
   // Cancel is called for fetching once again as previous attempt wasn't a success with updating
@@ -1512,7 +1523,7 @@ TEST_F(TaskRoleCredentialsProviderTest, FullCachedCredentials) {
   // init_watcher ready is called.
   init_watcher_.expectReady();
   // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
 
   // init_watcher ready is not called again.
@@ -1588,7 +1599,7 @@ TEST_F(TaskRoleCredentialsProviderTest, RefreshOnNormalCredentialExpiration) {
   // init_watcher ready is called.
   init_watcher_.expectReady();
   // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
 
   // init_watcher ready is not called again.
@@ -1648,7 +1659,7 @@ TEST_F(TaskRoleCredentialsProviderTest, TimestampCredentialExpiration) {
   // init_watcher ready is called.
   init_watcher_.expectReady();
   // Expect refresh timer to be started.
-  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
   setupProviderWithContext();
 
   // init_watcher ready is not called again.
