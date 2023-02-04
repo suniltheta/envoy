@@ -198,8 +198,8 @@ public:
 private:
   bool needsRefresh() override;
   void refresh() override;
-  void fetchInstanceRole(const std::string& token, bool async = false);
-  void fetchInstanceRoleAsync(const std::string& token) {
+  void fetchInstanceRole(const std::string&& token, bool async = false);
+  void fetchInstanceRoleAsync(const std::string&& token) {
     fetchInstanceRole(std::move(token), true);
   }
   void fetchCredentialFromInstanceRole(const std::string&& instance_role, const std::string&& token,

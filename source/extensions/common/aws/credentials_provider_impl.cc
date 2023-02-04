@@ -33,8 +33,6 @@ constexpr char AWS_EC2_METADATA_DISABLED[] = "AWS_EC2_METADATA_DISABLED";
 
 constexpr std::chrono::hours REFRESH_INTERVAL{1};
 constexpr std::chrono::seconds REFRESH_GRACE_PERIOD{5};
-constexpr char EC2_METADATA_HOST[] = "169.254.169.254:80";
-constexpr char CONTAINER_METADATA_HOST[] = "169.254.170.2:80";
 constexpr char EC2_IMDS_TOKEN_RESOURCE[] = "/latest/api/token";
 constexpr char EC2_IMDS_TOKEN_HEADER[] = "X-aws-ec2-metadata-token";
 constexpr char EC2_IMDS_TOKEN_TTL_HEADER[] = "X-aws-ec2-metadata-token-ttl-seconds";
@@ -103,8 +101,8 @@ void MetadataCredentialsProviderBase::handleFetchDone() {
 }
 
 bool InstanceProfileCredentialsProvider::needsRefresh() {
+  ENVOY_LOG(trace, "{}", __func__);
   bool needs_refresh = api_.timeSource().systemTime() - last_updated_ > REFRESH_INTERVAL;
-  ENVOY_LOG(trace, "{} : {}", __func__, needs_refresh);
   return needs_refresh;
 }
 
@@ -113,6 +111,7 @@ void InstanceProfileCredentialsProvider::refresh() {
   // First request for a session TOKEN so that we can call EC2MetadataService securely.
   // https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html
   Http::RequestMessageImpl token_req_message;
+  token_req_message.headers().setScheme(Http::Headers::get().SchemeValues.Http);
   token_req_message.headers().setMethod(Http::Headers::get().MethodValues.Put);
   token_req_message.headers().setHost(EC2_METADATA_HOST);
   token_req_message.headers().setPath(EC2_IMDS_TOKEN_RESOURCE);
@@ -139,13 +138,12 @@ void InstanceProfileCredentialsProvider::refresh() {
     if (!metadata_fetcher_) {
       metadata_fetcher_ = create_metadata_fetcher_cb_(cm_, clusterName());
     } else {
-      ENVOY_LOG(error, "{}: metadata_fetcher_->cancel();", __func__); // TODO: delete me
       metadata_fetcher_->cancel();
     }
     on_async_fetch_cb_ = [this](const std::string&& arg) {
       return this->fetchInstanceRoleAsync(std::move(arg));
     };
-    metadata_fetcher_->fetch(message, Tracing::NullSpan::instance(), *this);
+    metadata_fetcher_->fetch(token_req_message, Tracing::NullSpan::instance(), *this);
   }
 }
 
@@ -177,7 +175,6 @@ void InstanceProfileCredentialsProvider::fetchInstanceRole(const std::string&& t
     if (!metadata_fetcher_) {
       metadata_fetcher_ = create_metadata_fetcher_cb_(cm_, clusterName());
     } else {
-      ENVOY_LOG(error, "{}: metadata_fetcher_->cancel();", __func__); // TODO: delete me
       metadata_fetcher_->cancel();
     }
     on_async_fetch_cb_ = [this, token_string = std::move(token_string)](const std::string&& arg) {
@@ -193,7 +190,7 @@ void InstanceProfileCredentialsProvider::fetchCredentialFromInstanceRole(
   ENVOY_LOG(trace, __func__);
 
   if (instance_role.empty()) {
-    ENVOY_LOG(error, "No Roles found from the instance metadata");
+    ENVOY_LOG(error, "No Roles found to fetch AWS credentials from the EC2MetadataService");
     if (async) {
       handleFetchDone();
     }
@@ -239,7 +236,6 @@ void InstanceProfileCredentialsProvider::fetchCredentialFromInstanceRole(
     if (!metadata_fetcher_) {
       metadata_fetcher_ = create_metadata_fetcher_cb_(cm_, clusterName());
     } else {
-      ENVOY_LOG(error, "{}: metadata_fetcher_->cancel();", __func__);
       metadata_fetcher_->cancel();
     }
 
@@ -303,10 +299,10 @@ void InstanceProfileCredentialsProvider::onMetadataError(Failure) {
 }
 
 bool TaskRoleCredentialsProvider::needsRefresh() {
+  ENVOY_LOG(trace, "{}", __func__);
   const auto now = api_.timeSource().systemTime();
   bool needs_refresh =
       (now - last_updated_ > REFRESH_INTERVAL) || (expiration_time_ - now < REFRESH_GRACE_PERIOD);
-  ENVOY_LOG(error, "{} : {}", __func__, needs_refresh);
   return needs_refresh;
 }
 
