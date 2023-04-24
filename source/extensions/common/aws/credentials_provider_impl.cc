@@ -143,6 +143,8 @@ void InstanceProfileCredentialsProvider::refresh() {
     on_async_fetch_cb_ = [this](const std::string&& arg) {
       return this->fetchInstanceRoleAsync(std::move(arg));
     };
+    continue_on_async_fetch_failure_ = true; // FIXME: Unit test this part
+    continue_on_async_fetch_failure_reason_ = "Failed to get token from EC2MetadataService, falling back to less secure way";
     metadata_fetcher_->fetch(token_req_message, Tracing::NullSpan::instance(), *this);
   }
 }
@@ -288,14 +290,21 @@ void InstanceProfileCredentialsProvider::extractCredentials(
 
 void InstanceProfileCredentialsProvider::onMetadataSuccess(const std::string&& body) {
   // TODO (suniltheta) increment fetch success stats
-  ENVOY_LOG(info, "AWS credentials document fetch success, calling callback func");
+  ENVOY_LOG(info, "AWS Instance metadata fetch success, calling callback func");
   on_async_fetch_cb_(std::move(body));
 }
 
 void InstanceProfileCredentialsProvider::onMetadataError(Failure) {
   // TODO (suniltheta) increment fetch failed stats
-  ENVOY_LOG(error, "AWS credentials document fetch failure");
-  handleFetchDone();
+  if (continue_on_async_fetch_failure_) {
+    ENVOY_LOG(warn, continue_on_async_fetch_failure_reason_);
+    continue_on_async_fetch_failure_ = false;
+    continue_on_async_fetch_failure_reason_ = "";
+    on_async_fetch_cb_(std::move(""));
+  } else {
+    ENVOY_LOG(error, "AWS Instance metadata fetch failure");
+    handleFetchDone();
+  }
 }
 
 bool TaskRoleCredentialsProvider::needsRefresh() {
@@ -391,13 +400,13 @@ void TaskRoleCredentialsProvider::extractCredentials(
 
 void TaskRoleCredentialsProvider::onMetadataSuccess(const std::string&& body) {
   // TODO (suniltheta) increment fetch success stats
-  ENVOY_LOG(debug, "AWS credentials document fetch success, calling callback func");
+  ENVOY_LOG(debug, "AWS metadata fetch success, calling callback func");
   on_async_fetch_cb_(std::move(body));
 }
 
 void TaskRoleCredentialsProvider::onMetadataError(Failure) {
   // TODO (suniltheta) increment fetch failed stats
-  ENVOY_LOG(error, "AWS credentials document fetch failure");
+  ENVOY_LOG(error, "AWS metadata fetch failure");
   handleFetchDone();
 }
 

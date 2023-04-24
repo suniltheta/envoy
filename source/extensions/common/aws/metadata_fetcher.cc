@@ -43,6 +43,17 @@ public:
     if (!receiver_) {
       receiver_ = &receiver;
     }
+    // cm_.checkActiveStaticCluster(cluster_name_);
+    ENVOY_LOG(error, "const auto thread_local_cluster = cm_.getThreadLocalCluster(cluster_name_);");
+    const auto thread_local_cluster = cm_.getThreadLocalCluster(cluster_name_);
+    ENVOY_LOG(error, "if (thread_local_cluster == nullptr) ");
+    if (thread_local_cluster == nullptr) {
+      ENVOY_LOG(error, "{} AWS Metadata failed: [cluster = {}] not found", __func__, cluster_name_);
+      complete_ = true;
+      receiver_->onMetadataError(MetadataFetcher::MetadataReceiver::Failure::MissingConfig);
+      reset();
+      return;
+    }
 
     constexpr uint64_t MAX_RETRIES = 4;
     constexpr uint64_t RETRY_DELAY = 1000;
@@ -75,26 +86,29 @@ public:
     //   return;
     // }
 
-    const auto thread_local_cluster = cm_.getThreadLocalCluster(cluster_name_);
-    if (thread_local_cluster == nullptr) {
-      ENVOY_LOG(error, "{} AWS Metadata failed: [cluster = {}] not found", __func__, cluster_name_);
-      complete_ = true;
-      receiver_->onMetadataError(MetadataFetcher::MetadataReceiver::Failure::MissingConfig);
-      reset();
-      return;
-    }
-
     Http::RequestHeaderMapPtr headersPtr =
         Envoy::Http::createHeaderMap<Envoy::Http::RequestHeaderMapImpl>(
             {{Envoy::Http::Headers::get().Method, std::string(method)},
              {Envoy::Http::Headers::get().Host, std::string(host)},
              {Envoy::Http::Headers::get().Scheme, std::string(scheme)},
              {Envoy::Http::Headers::get().Path, std::string(path)}});
+
+    // Copy the remaining headers.
+    message.headers().iterate([&headersPtr](const Http::HeaderEntry& entry) -> Http::HeaderMap::Iterate {
+      // Skip pseudo-headers
+      if (!entry.key().getStringView().empty() && entry.key().getStringView()[0] == ':') {
+        return Http::HeaderMap::Iterate::Continue;
+      }
+      headersPtr->addCopy(Http::LowerCaseString(entry.key().getStringView()), entry.value().getStringView());
+      return Http::HeaderMap::Iterate::Continue;
+    });
+
     auto messagePtr = std::make_unique<Envoy::Http::RequestMessageImpl>(std::move(headersPtr));
 
     auto options = Http::AsyncClient::RequestOptions()
                        .setTimeout(std::chrono::milliseconds(TIMEOUT))
                        .setParentSpan(parent_span)
+                       .setSendXff(false)
                        .setChildSpanName("AWS Metadata Fetch");
 
     // TODO (suniltheta): Get this retry policy from provider config

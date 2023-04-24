@@ -186,7 +186,7 @@ public:
                                            {"X-aws-ec2-metadata-token-ttl-seconds", "21600"}};
     EXPECT_CALL(*raw_metadata_fetcher_, fetch(messageMatches(headers), _, _))
         .WillRepeatedly(
-            Invoke([this, token = std::move(token)](Http::RequestMessage&, Tracing::Span&,
+            Invoke([token = std::move(token)](Http::RequestMessage&, Tracing::Span&,
                                                     MetadataFetcher::MetadataReceiver& receiver) {
               receiver.onMetadataSuccess(std::move(token));
             }));
@@ -215,7 +215,7 @@ public:
                                            {":scheme", "http"},
                                            {":method", "GET"}};
     EXPECT_CALL(*raw_metadata_fetcher_, fetch(messageMatches(headers), _, _))
-        .WillRepeatedly(Invoke([this, instance_role = std::move(instance_role)](
+        .WillRepeatedly(Invoke([instance_role = std::move(instance_role)](
                                    Http::RequestMessage&, Tracing::Span&,
                                    MetadataFetcher::MetadataReceiver& receiver) {
           receiver.onMetadataSuccess(std::move(instance_role));
@@ -229,7 +229,7 @@ public:
                                            {":method", "GET"},
                                            {"X-aws-ec2-metadata-token", "TOKEN"}};
     EXPECT_CALL(*raw_metadata_fetcher_, fetch(messageMatches(headers), _, _))
-        .WillRepeatedly(Invoke([this, instance_role = std::move(instance_role)](
+        .WillRepeatedly(Invoke([instance_role = std::move(instance_role)](
                                    Http::RequestMessage&, Tracing::Span&,
                                    MetadataFetcher::MetadataReceiver& receiver) {
           receiver.onMetadataSuccess(std::move(instance_role));
@@ -263,7 +263,7 @@ public:
         {":method", "GET"}};
     EXPECT_CALL(*raw_metadata_fetcher_, fetch(messageMatches(headers), _, _))
         .WillRepeatedly(
-            Invoke([this, credential_document_value = std::move(credential_document_value)](
+            Invoke([credential_document_value = std::move(credential_document_value)](
                        Http::RequestMessage&, Tracing::Span&,
                        MetadataFetcher::MetadataReceiver& receiver) {
               receiver.onMetadataSuccess(std::move(credential_document_value));
@@ -279,7 +279,7 @@ public:
         {"X-aws-ec2-metadata-token", "TOKEN"}};
     EXPECT_CALL(*raw_metadata_fetcher_, fetch(messageMatches(headers), _, _))
         .WillRepeatedly(
-            Invoke([this, credential_document_value = std::move(credential_document_value)](
+            Invoke([credential_document_value = std::move(credential_document_value)](
                        Http::RequestMessage&, Tracing::Span&,
                        MetadataFetcher::MetadataReceiver& receiver) {
               receiver.onMetadataSuccess(std::move(credential_document_value));
@@ -1199,7 +1199,7 @@ public:
                                            {"authorization", "auth_token"}};
     EXPECT_CALL(*raw_metadata_fetcher_, fetch(messageMatches(headers), _, _))
         .WillRepeatedly(Invoke(
-            [this, document = std::move(document)](Http::RequestMessage&, Tracing::Span&,
+            [document = std::move(document)](Http::RequestMessage&, Tracing::Span&,
                                                    MetadataFetcher::MetadataReceiver& receiver) {
               receiver.onMetadataSuccess(std::move(document));
             }));

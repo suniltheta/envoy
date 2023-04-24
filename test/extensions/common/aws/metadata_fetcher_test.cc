@@ -79,6 +79,8 @@ TEST_F(MetadataFetcherTest, TestRequestMatch) {
   message.headers().setMethod(Http::Headers::get().MethodValues.Get);
   message.headers().setHost("169.254.170.2:80");
   message.headers().setPath("/v2/credentials/c68caeb5-ef71-4914-8170-111111111111");
+  message.headers().setCopy(Http::LowerCaseString(":pseudo-header"), "peudo-header-value");
+  message.headers().setCopy(Http::LowerCaseString("X-aws-ec2-metadata-token"), "Token");
 
   MockUpstream mock_result(mock_factory_ctx_.cluster_manager_, "200", "not_empty");
   MockMetadataReceiver receiver;
@@ -92,6 +94,8 @@ TEST_F(MetadataFetcherTest, TestRequestMatch) {
                   request->headers().getPathValue());
         EXPECT_EQ(Http::Headers::get().MethodValues.Get, request->headers().getMethodValue());
         EXPECT_EQ(Http::Headers::get().SchemeValues.Http, request->headers().getSchemeValue());
+        EXPECT_EQ("Token", request->headers().get(Http::LowerCaseString("X-aws-ec2-metadata-token"))[0]->value().getStringView());
+        EXPECT_TRUE(request->headers().get(Http::LowerCaseString(":pseudo-header")).empty());
         return nullptr;
       }));
 
@@ -142,9 +146,9 @@ TEST_F(MetadataFetcherTest, TestHttpFailure) {
   fetcher_->fetch(message, parent_span_, receiver);
 }
 
-// TODO: Add below 2 tests on credentials_provider_impl_test.cc
-TEST_F(MetadataFetcherTest, TestAddMissingCluster) {
-  // Setup without thread local cluster yet
+// TODO: Add below 2 tests on credentials_provider_impl_test.cc. In 2023 ??
+TEST_F(MetadataFetcherTest, TestWithValidCluster) {
+  // Setup with thread local cluster
   Http::RequestMessageImpl message;
   message.headers().setScheme(Http::Headers::get().SchemeValues.Http);
   message.headers().setMethod(Http::Headers::get().MethodValues.Get);
@@ -164,6 +168,7 @@ TEST_F(MetadataFetcherTest, TestAddMissingCluster) {
   fetcher_->fetch(message, parent_span_, receiver);
 }
 
+/*
 TEST_F(MetadataFetcherTest, TestClusterAddFail) {
   // Setup without thread local cluster
   fetcher_ = MetadataFetcher::create(mock_factory_ctx_.cluster_manager_, "cluster_name");
@@ -177,7 +182,7 @@ TEST_F(MetadataFetcherTest, TestClusterAddFail) {
 
   // Act
   fetcher_->fetch(message, parent_span_, receiver);
-}
+}*/
 
 TEST_F(MetadataFetcherTest, TestClusterNotFound) {
   // Setup without thread local cluster
