@@ -103,6 +103,7 @@ public:
                       ClusterManager& cm) override;
   Secret::SecretManager& secretManager() override { return secret_manager_; }
   Singleton::Manager& singletonManager() override { return server_context_.singletonManager(); }
+  Server::Configuration::ServerFactoryContext& serverFactoryContext() override {return server_context_; }
 
 protected:
   Server::Configuration::ServerFactoryContext& server_context_;

@@ -174,6 +174,7 @@ public:
   GoogleAsyncClientImpl(Event::Dispatcher& dispatcher, GoogleAsyncClientThreadLocal& tls,
                         GoogleStubFactory& stub_factory, Stats::ScopeSharedPtr scope,
                         const envoy::config::core::v3::GrpcService& config, Api::Api& api,
+                        Server::Configuration::ServerFactoryContext& server_context,
                         const StatNames& stat_names);
   ~GoogleAsyncClientImpl() override;
 

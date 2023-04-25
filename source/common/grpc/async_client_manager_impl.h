@@ -31,7 +31,7 @@ public:
   GoogleAsyncClientFactoryImpl(ThreadLocal::Instance& tls, ThreadLocal::Slot* google_tls_slot,
                                Stats::Scope& scope,
                                const envoy::config::core::v3::GrpcService& config, Api::Api& api,
-                               const StatNames& stat_names);
+                               Server::Configuration::ServerFactoryContext& server_context_, const StatNames& stat_names);
   RawAsyncClientPtr createUncachedRawAsyncClient() override;
 
 private:
@@ -40,12 +40,14 @@ private:
   Stats::ScopeSharedPtr scope_;
   const envoy::config::core::v3::GrpcService config_;
   Api::Api& api_;
+  Server::Configuration::ServerFactoryContext& server_context_;
   const StatNames& stat_names_;
 };
 
 class AsyncClientManagerImpl : public AsyncClientManager {
 public:
-  AsyncClientManagerImpl(Upstream::ClusterManager& cm, ThreadLocal::Instance& tls,
+  AsyncClientManagerImpl(Server::Configuration::ServerFactoryContext& server_context,
+                         Upstream::ClusterManager& cm, ThreadLocal::Instance& tls,
                          TimeSource& time_source, Api::Api& api, const StatNames& stat_names);
   RawAsyncClientSharedPtr
   getOrCreateRawAsyncClient(const envoy::config::core::v3::GrpcService& config, Stats::Scope& scope,
@@ -83,6 +85,7 @@ public:
   };
 
 private:
+  Server::Configuration::ServerFactoryContext& server_context_;
   Upstream::ClusterManager& cm_;
   ThreadLocal::Instance& tls_;
   ThreadLocal::SlotPtr google_tls_slot_;

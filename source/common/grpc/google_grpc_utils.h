@@ -7,6 +7,7 @@
 #include "envoy/buffer/buffer.h"
 #include "envoy/common/platform.h"
 #include "envoy/config/core/v3/grpc_service.pb.h"
+#include "envoy/server/factory_context.h"
 
 #include "grpcpp/grpcpp.h"
 
@@ -43,10 +44,12 @@ public:
    * Build gRPC channel based on the given GrpcService configuration.
    * @param config Google gRPC config.
    * @param api reference to the Api object
+   * @param server_context reference to the ServerFactoryContext
    * @return static std::shared_ptr<grpc::Channel> a gRPC channel.
    */
   static std::shared_ptr<grpc::Channel>
-  createChannel(const envoy::config::core::v3::GrpcService& config, Api::Api& api);
+  createChannel(const envoy::config::core::v3::GrpcService& config, Api::Api& api,
+                Server::Configuration::ServerFactoryContext& server_context);
 };
 
 } // namespace Grpc

@@ -6,6 +6,7 @@
 #include "envoy/common/pure.h"
 #include "envoy/config/core/v3/grpc_service.pb.h"
 #include "envoy/config/typed_config.h"
+#include "envoy/server/factory_context.h"
 
 #include "grpcpp/grpcpp.h"
 
@@ -28,12 +29,13 @@ public:
    *
    * @param grpc_service_config contains configuration options
    * @param api reference to the Api object
+   * @param server_context reference to the ServerFactoryContext
    * @return std::shared_ptr<grpc::ChannelCredentials> to be used to authenticate a Google gRPC
    * channel.
    */
   virtual std::shared_ptr<grpc::ChannelCredentials>
   getChannelCredentials(const envoy::config::core::v3::GrpcService& grpc_service_config,
-                        Api::Api& api) PURE;
+                        Api::Api& api, Server::Configuration::ServerFactoryContext& server_context) PURE;
 
   std::string category() const override { return "envoy.grpc_credentials"; }
 };

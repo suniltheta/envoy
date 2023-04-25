@@ -18,6 +18,7 @@ envoy_cc_extension(
     hdrs = ["config.h"],
     deps = [
         ":opencensus_tracer_impl",
+        "//envoy/server:factory_context_interface",
         "//source/extensions/tracers/common:factory_base_lib",
         "@envoy_api//envoy/config/trace/v3:pkg_cc_proto",
     ],
@@ -40,6 +41,7 @@ envoy_cc_library(
         "opencensus_exporter_zipkin",
     ],
     deps = [
+        "//envoy/server:factory_context_interface",
         "//source/common/config:utility_lib",
         "//source/common/tracing:http_tracer_lib",
         "@envoy_api//envoy/config/trace/v3:pkg_cc_proto",

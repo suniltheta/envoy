@@ -523,6 +523,11 @@ public:
    * Returns the singleton manager.
    */
   virtual Singleton::Manager& singletonManager() PURE;
+
+  /**
+   * Returns the server factory context.
+   */
+  virtual Server::Configuration::ServerFactoryContext& serverFactoryContext() PURE;
 };
 
 /**

@@ -5,6 +5,7 @@
 #include "envoy/api/api.h"
 #include "envoy/event/timer.h"
 #include "envoy/http/message.h"
+#include "envoy/thread_local/thread_local.h"
 
 #include "source/common/common/logger.h"
 #include "source/common/common/thread.h"
@@ -34,8 +35,11 @@ class MetadataCredentialsProviderBase : public CredentialsProvider,
 public:
   using MetadataFetcher = std::function<absl::optional<std::string>(Http::RequestMessage&)>;
 
-  MetadataCredentialsProviderBase(Api::Api& api, const MetadataFetcher& metadata_fetcher)
-      : api_(api), metadata_fetcher_(metadata_fetcher) {}
+  MetadataCredentialsProviderBase(Api::Api& api, Upstream::ClusterManager& cm, Init::Manager& init_manager,
+                Event::Dispatcher& dispatcher, ThreadLocal::SlotAllocator& thread_local_slot_alloc,
+                const MetadataFetcher& metadata_fetcher)
+      : api_(api), cm_(cm), init_manager_(init_manager), dispatcher_(dispatcher),
+         thread_local_slot_alloc_(thread_local_slot_alloc), metadata_fetcher_(metadata_fetcher) {}
 
   Credentials getCredentials() override {
     refreshIfNeeded();
@@ -44,6 +48,11 @@ public:
 
 protected:
   Api::Api& api_;
+  // The cluster manager object.
+  Upstream::ClusterManager& cm_;
+  Init::Manager& init_manager_;
+  Event::Dispatcher& dispatcher_;
+  ThreadLocal::SlotAllocator& thread_local_slot_alloc_;
   MetadataFetcher metadata_fetcher_;
   SystemTime last_updated_;
   Credentials cached_credentials_;
@@ -62,8 +71,9 @@ protected:
  */
 class InstanceProfileCredentialsProvider : public MetadataCredentialsProviderBase {
 public:
-  InstanceProfileCredentialsProvider(Api::Api& api, const MetadataFetcher& metadata_fetcher)
-      : MetadataCredentialsProviderBase(api, metadata_fetcher) {}
+  InstanceProfileCredentialsProvider(Api::Api& api, Upstream::ClusterManager& cm, Init::Manager& init_manager,
+                Event::Dispatcher& dispatcher, ThreadLocal::SlotAllocator& thread_local_slot_alloc, const MetadataFetcher& metadata_fetcher)
+      : MetadataCredentialsProviderBase(api, cm, init_manager, dispatcher, thread_local_slot_alloc, metadata_fetcher) {}
 
 private:
   bool needsRefresh() override;
@@ -80,10 +90,13 @@ private:
  */
 class TaskRoleCredentialsProvider : public MetadataCredentialsProviderBase {
 public:
-  TaskRoleCredentialsProvider(Api::Api& api, const MetadataFetcher& metadata_fetcher,
+  TaskRoleCredentialsProvider(Api::Api& api, Upstream::ClusterManager& cm, Init::Manager& init_manager,
+                              Event::Dispatcher& dispatcher, ThreadLocal::SlotAllocator& thread_local_slot_alloc,
+                              const MetadataFetcher& metadata_fetcher,
                               absl::string_view credential_uri,
                               absl::string_view authorization_token = {})
-      : MetadataCredentialsProviderBase(api, metadata_fetcher), credential_uri_(credential_uri),
+      : MetadataCredentialsProviderBase(api, cm, init_manager, dispatcher, thread_local_slot_alloc,
+        metadata_fetcher), credential_uri_(credential_uri),
         authorization_token_(authorization_token) {}
 
 private:
@@ -121,11 +134,16 @@ public:
   virtual CredentialsProviderSharedPtr createEnvironmentCredentialsProvider() const PURE;
 
   virtual CredentialsProviderSharedPtr createTaskRoleCredentialsProvider(
-      Api::Api& api, const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
+      Api::Api& api,
+      Upstream::ClusterManager& cm, Init::Manager& init_manager,
+      Event::Dispatcher& dispatcher, ThreadLocal::SlotAllocator& thread_local_slot_alloc,
+      const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
       absl::string_view credential_uri, absl::string_view authorization_token = {}) const PURE;
 
   virtual CredentialsProviderSharedPtr createInstanceProfileCredentialsProvider(
       Api::Api& api,
+      Upstream::ClusterManager& cm, Init::Manager& init_manager,
+      Event::Dispatcher& dispatcher, ThreadLocal::SlotAllocator& thread_local_slot_alloc,
       const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher) const PURE;
 };
 
@@ -139,11 +157,15 @@ class DefaultCredentialsProviderChain : public CredentialsProviderChain,
                                         public CredentialsProviderChainFactories {
 public:
   DefaultCredentialsProviderChain(
-      Api::Api& api, const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher)
-      : DefaultCredentialsProviderChain(api, metadata_fetcher, *this) {}
+      Api::Api& api, Upstream::ClusterManager& cm, Init::Manager& init_manager,
+      Event::Dispatcher& dispatcher, ThreadLocal::SlotAllocator& thread_local_slot_alloc,
+      const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher)
+      : DefaultCredentialsProviderChain(api, cm, init_manager, dispatcher, thread_local_slot_alloc, metadata_fetcher, *this) {}
 
   DefaultCredentialsProviderChain(
-      Api::Api& api, const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
+      Api::Api& api, Upstream::ClusterManager& cm, Init::Manager& init_manager,
+      Event::Dispatcher& dispatcher, ThreadLocal::SlotAllocator& thread_local_slot_alloc,
+      const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
       const CredentialsProviderChainFactories& factories);
 
 private:
@@ -152,16 +174,20 @@ private:
   }
 
   CredentialsProviderSharedPtr createTaskRoleCredentialsProvider(
-      Api::Api& api, const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
+      Api::Api& api, Upstream::ClusterManager& cm, Init::Manager& init_manager,
+      Event::Dispatcher& dispatcher, ThreadLocal::SlotAllocator& thread_local_slot_alloc,
+      const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher,
       absl::string_view credential_uri, absl::string_view authorization_token = {}) const override {
-    return std::make_shared<TaskRoleCredentialsProvider>(api, metadata_fetcher, credential_uri,
+    return std::make_shared<TaskRoleCredentialsProvider>(api, cm, init_manager, dispatcher, thread_local_slot_alloc, metadata_fetcher, credential_uri,
                                                          authorization_token);
   }
 
   CredentialsProviderSharedPtr createInstanceProfileCredentialsProvider(
       Api::Api& api,
+      Upstream::ClusterManager& cm, Init::Manager& init_manager,
+      Event::Dispatcher& dispatcher, ThreadLocal::SlotAllocator& thread_local_slot_alloc,
       const MetadataCredentialsProviderBase::MetadataFetcher& metadata_fetcher) const override {
-    return std::make_shared<InstanceProfileCredentialsProvider>(api, metadata_fetcher);
+    return std::make_shared<InstanceProfileCredentialsProvider>(api, cm, init_manager, dispatcher, thread_local_slot_alloc, metadata_fetcher);
   }
 };
 

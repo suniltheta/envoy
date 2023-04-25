@@ -4,6 +4,7 @@
 
 #include "envoy/config/trace/v3/opencensus.pb.h"
 #include "envoy/config/trace/v3/opencensus.pb.validate.h"
+#include "envoy/server/factory_context.h"
 
 #include "source/extensions/tracers/common/factory_base.h"
 

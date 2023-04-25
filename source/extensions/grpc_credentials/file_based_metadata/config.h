@@ -24,7 +24,8 @@ class FileBasedMetadataGrpcCredentialsFactory : public Grpc::GoogleGrpcCredentia
 public:
   std::shared_ptr<grpc::ChannelCredentials>
   getChannelCredentials(const envoy::config::core::v3::GrpcService& grpc_service_config,
-                        Api::Api& api) override;
+                        Api::Api& api,
+                        Server::Configuration::ServerFactoryContext& server_context) override;
 
   Envoy::ProtobufTypes::MessagePtr createEmptyConfigProto() {
     return std::make_unique<envoy::config::grpc_credential::v3::FileBasedMetadataConfig>();
