@@ -99,9 +99,7 @@ MetadataCredentialsProviderBase::MetadataCredentialsProviderBase(
       create_metadata_fetcher_cb_(create_metadata_fetcher_cb),
       cluster_name_(std::string(cluster_name)), cache_duration_(getCacheDuration()),
       debug_name_(absl::StrCat("Fetching aws credentials from cluster=", cluster_name)) {
-  if (!Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") &&
-      context_) {
+  if (context_) {
     context_->mainThreadDispatcher().post([this, uri]() {
       if (!Utility::addInternalClusterStatic(context_->clusterManager(), cluster_name_, "STATIC",
                                              uri)) {
@@ -117,13 +115,20 @@ MetadataCredentialsProviderBase::MetadataCredentialsProviderBase(
         [](Envoy::Event::Dispatcher&) { return std::make_shared<ThreadLocalCredentialsCache>(); });
 
     cache_duration_timer_ = context_->mainThreadDispatcher().createTimer([this]() -> void {
-      const Thread::LockGuard lock(lock_);
-      refresh();
+      if (!Runtime::runtimeFeatureEnabled(
+              "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
+        const Thread::LockGuard lock(lock_);
+        refresh();
+      }
     });
 
-    // Register with init_manager, force the listener to wait for fetching (refresh).
-    init_target_ = std::make_unique<Init::TargetImpl>(debug_name_, [this]() -> void { refresh(); });
-    context_->initManager().add(*init_target_);
+    if (!Runtime::runtimeFeatureEnabled(
+            "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
+      // Register with init_manager, force the listener to wait for fetching (refresh).
+      init_target_ =
+          std::make_unique<Init::TargetImpl>(debug_name_, [this]() -> void { refresh(); });
+      context_->initManager().add(*init_target_);
+    }
   }
 }
 

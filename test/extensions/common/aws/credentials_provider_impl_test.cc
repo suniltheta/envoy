@@ -1174,7 +1174,7 @@ public:
   InstanceProfileCredentialsProviderPtr provider_;
 };
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FailedCredentialListingCurlUnsecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FailedCredentialListingUnsecure) {
   setupProvider();
   expectSessionToken(absl::optional<std::string>());
   expectCredentialListing(absl::optional<std::string>());
@@ -1184,7 +1184,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FailedCredentialListi
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FailedCredentialListingCurlSecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FailedCredentialListingSecure) {
   setupProvider();
   expectSessionToken("TOKEN");
   expectCredentialListingSecure(absl::optional<std::string>());
@@ -1194,7 +1194,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FailedCredentialListi
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyCredentialListingCurlUnsecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyCredentialListingUnsecure) {
   setupProvider();
   expectSessionToken(absl::optional<std::string>());
   expectCredentialListing("");
@@ -1204,7 +1204,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyCredentialListin
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyCredentialListingCurlSecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyCredentialListingSecure) {
   setupProvider();
   expectSessionToken("TOKEN");
   expectCredentialListingSecure("\n");
@@ -1214,7 +1214,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyCredentialListin
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyListCredentialListingCurlUnsecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyListCredentialListingUnsecure) {
   setupProvider();
   expectSessionToken(absl::optional<std::string>());
   expectCredentialListing("\n");
@@ -1224,7 +1224,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyListCredentialLi
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyListCredentialListingCurlSecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyListCredentialListingSecure) {
   setupProvider();
   expectSessionToken("TOKEN");
   expectCredentialListingSecure("");
@@ -1234,7 +1234,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyListCredentialLi
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MissingDocumentCurlUnsecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MissingDocumentUnsecure) {
   setupProvider();
   expectSessionToken(absl::optional<std::string>());
   expectCredentialListing("doc1\ndoc2\ndoc3");
@@ -1245,7 +1245,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MissingDocumentCurlUn
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MissingDocumentCurlSecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MissingDocumentSecure) {
   setupProvider();
   expectSessionToken("TOKEN");
   expectCredentialListingSecure("doc1\ndoc2\ndoc3");
@@ -1256,7 +1256,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MissingDocumentCurlSe
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MalformedDocumentCurlUnsecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MalformedDocumentUnsecure) {
   setupProvider();
   expectSessionToken(absl::optional<std::string>());
   expectCredentialListing("doc1");
@@ -1269,7 +1269,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MalformedDocumentCurl
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MalformedDocumentCurlSecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, MalformedDocumentSecure) {
   setupProvider();
   expectSessionToken("TOKEN");
   expectCredentialListingSecure("doc1");
@@ -1282,7 +1282,7 @@ not json
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyValuesCurlUnsecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyValuesUnsecure) {
   setupProvider();
   expectSessionToken(absl::optional<std::string>());
   expectCredentialListing("doc1");
@@ -1299,7 +1299,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyValuesCurlUnsecu
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyValuesCurlSecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyValuesSecure) {
   setupProvider();
   expectSessionToken("TOKEN");
   expectCredentialListingSecure("doc1");
@@ -1316,7 +1316,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, EmptyValuesCurlSecure
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FullCachedCredentialsCurlUnsecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FullCachedCredentialsUnsecure) {
   setupProvider();
   expectSessionToken(absl::optional<std::string>());
   expectCredentialListing("doc1");
@@ -1337,7 +1337,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FullCachedCredentials
   EXPECT_EQ("token", cached_credentials.sessionToken().value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FullCachedCredentialsCurlSecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FullCachedCredentialsSecure) {
   setupProvider();
   expectSessionToken("TOKEN");
   expectCredentialListingSecure("doc1");
@@ -1358,7 +1358,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, FullCachedCredentials
   EXPECT_EQ("token", cached_credentials.sessionToken().value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, CredentialExpirationCurlUnsecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, CredentialExpirationUnsecure) {
   setupProvider();
   InSequence sequence;
   expectSessionToken(absl::optional<std::string>());
@@ -1390,7 +1390,7 @@ TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, CredentialExpirationC
   EXPECT_EQ("new_token", new_credentials.sessionToken().value());
 }
 
-TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, CredentialExpirationCurlSecure) {
+TEST_F(InstanceProfileCredentialsProviderUsingLibcurlTest, CredentialExpirationSecure) {
   setupProvider();
   InSequence sequence;
   expectSessionToken("TOKEN");
@@ -1849,7 +1849,7 @@ public:
   TaskRoleCredentialsProviderPtr provider_;
 };
 
-TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, FailedFetchingDocumentCurl) {
+TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, FailedFetchingDocument) {
   setupProvider();
   expectDocument(absl::optional<std::string>());
   const auto credentials = provider_->getCredentials();
@@ -1858,7 +1858,7 @@ TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, FailedFetchingDocumentCurl) 
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, EmptyDocumentCurl) {
+TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, EmptyDocument) {
   setupProvider();
   expectDocument("");
   const auto credentials = provider_->getCredentials();
@@ -1867,7 +1867,7 @@ TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, EmptyDocumentCurl) {
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, MalformedDocumentCurl) {
+TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, MalformedDocument) {
   setupProvider();
   expectDocument(R"EOF(
 not json
@@ -1878,7 +1878,7 @@ not json
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, EmptyValuesCurl) {
+TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, EmptyValues) {
   setupProvider();
   expectDocument(R"EOF(
 {
@@ -1894,7 +1894,7 @@ TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, EmptyValuesCurl) {
   EXPECT_FALSE(credentials.sessionToken().has_value());
 }
 
-TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, FullCachedCredentialsCurl) {
+TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, FullCachedCredentials) {
   setupProvider();
   expectDocument(R"EOF(
 {
@@ -1914,7 +1914,7 @@ TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, FullCachedCredentialsCurl) {
   EXPECT_EQ("token", cached_credentials.sessionToken().value());
 }
 
-TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, NormalCredentialExpirationCurl) {
+TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, NormalCredentialExpiration) {
   setupProvider();
   InSequence sequence;
   expectDocument(R"EOF(
@@ -1944,7 +1944,7 @@ TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, NormalCredentialExpirationCu
   EXPECT_EQ("new_token", cached_credentials.sessionToken().value());
 }
 
-TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, TimestampCredentialExpirationCurl) {
+TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, TimestampCredentialExpiration) {
   setupProvider();
   InSequence sequence;
   expectDocument(R"EOF(
