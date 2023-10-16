@@ -222,6 +222,22 @@ Utility::joinCanonicalHeaderNames(const std::map<std::string, std::string>& cano
   });
 }
 
+std::string Utility::getSTSEndpoint(absl::string_view region) {
+  if (region == "cn-northwest-1" || region == "cn-north-1") {
+    return fmt::format("sts.{}.amazonaws.com.cn", region);
+  }
+#ifdef ENVOY_SSL_FIPS
+  // Use AWS STS FIPS endpoints in FIPS mode https://docs.aws.amazon.com/general/latest/gr/sts.html.
+  // Note: AWS GovCloud doesn't have separate fips endpoints.
+  // TODO(suniltheta): Include `ca-central-1` when sts support a dedicated FIPS endpoint.
+  if (region == "us-east-1" || region == "us-east-2" || region == "us-west-1" ||
+      region == "us-west-2") {
+    return fmt::format("sts-fips.{}.amazonaws.com", region);
+  }
+#endif
+  return fmt::format("sts.{}.amazonaws.com", region);
+}
+
 static size_t curlCallback(char* ptr, size_t, size_t nmemb, void* data) {
   auto buf = static_cast<std::string*>(data);
   buf->append(ptr, nmemb);
@@ -309,10 +325,21 @@ bool Utility::addInternalClusterStatic(Upstream::ClusterManager& cm, absl::strin
       envoy::config::cluster::v3::Cluster cluster;
       absl::string_view host_port;
       absl::string_view path;
+      absl::string_view transport_socket = "";
       Http::Utility::extractHostPathFromUri(uri, host_port, path);
       const auto host_attributes = Http::Utility::parseAuthority(host_port);
       const auto host = host_attributes.host_;
       const auto port = host_attributes.port_ ? host_attributes.port_.value() : 80;
+      // Add tls transport socket if cluster supports https over port 443.
+      if (port == 443) {
+        transport_socket = R"(
+transport_socket:
+  name: envoy.transport_sockets.tls
+  typed_config:
+    "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+)";
+      }
+
       MessageUtil::loadFromYaml(fmt::format(R"EOF(
 name: {cluster_name}
 type: {cluster_type}
@@ -333,10 +360,12 @@ typed_extension_protocol_options:
     explicit_http_config:
       http_protocol_options:
         accept_http_10: true
+{transport_socket}
   )EOF",
                                             fmt::arg("cluster_name", cluster_name),
                                             fmt::arg("cluster_type", cluster_type),
-                                            fmt::arg("host", host), fmt::arg("port", port)),
+                                            fmt::arg("host", host), fmt::arg("port", port),
+                                            fmt::arg("transport_socket", transport_socket)),
                                 cluster, ProtobufMessage::getNullValidationVisitor());
 
       // TODO(suniltheta): use random number generator here for cluster version.

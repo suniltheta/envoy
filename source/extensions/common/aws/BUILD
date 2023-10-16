@@ -2,6 +2,7 @@ load(
     "//bazel:envoy_build_system.bzl",
     "envoy_cc_library",
     "envoy_extension_package",
+    "envoy_select_boringssl",
 )
 
 licenses(["notice"])  # Apache 2
@@ -56,7 +57,10 @@ envoy_cc_library(
     name = "credentials_provider_impl_lib",
     srcs = ["credentials_provider_impl.cc"],
     hdrs = ["credentials_provider_impl.h"],
-    external_deps = ["abseil_time"],
+    external_deps = [
+        "abseil_time",
+        "tinyxml2",
+    ],
     deps = [
         ":credentials_provider_interface",
         ":metadata_fetcher_lib",
@@ -75,6 +79,14 @@ envoy_cc_library(
     name = "utility_lib",
     srcs = ["utility.cc"],
     hdrs = ["utility.h"],
+    copts = envoy_select_boringssl(
+        [
+            "-DENVOY_SSL_FIPS",
+        ],
+        [
+            "-DENVOY_SSL_FIPS",
+        ],
+    ),
     external_deps = ["curl"],
     deps = [
         "//envoy/http:message_interface",

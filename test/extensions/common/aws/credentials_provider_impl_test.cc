@@ -58,7 +58,11 @@ aws_secret_access_key = profile4_secret
 aws_session_token = profile4_token
 )";
 
-MATCHER_P(WithName, expectedName, "") { return arg.name() == expectedName; }
+MATCHER_P(WithName, expectedName, "") {
+  *result_listener << "\nexpected { name: \"" << expectedName << "\"} but got {name: \""
+                   << arg.name() << "\"}\n";
+  return ExplainMatchResult(expectedName, arg.name(), result_listener);
+}
 
 MATCHER_P(WithAttribute, expectedCluster, "") {
   const auto argSocketAddress =
@@ -69,9 +73,23 @@ MATCHER_P(WithAttribute, expectedCluster, "") {
                                          .endpoint()
                                          .address()
                                          .socket_address();
-  return arg.name() == expectedCluster.name() &&
-         argSocketAddress.address() == expectedSocketAddress.address() &&
-         argSocketAddress.port_value() == expectedSocketAddress.port_value();
+
+  *result_listener << "\nexpected {cluster name: \"" << expectedCluster.name() << "\", type: \""
+                   << expectedCluster.type() << "\", socket address: \""
+                   << expectedSocketAddress.address() << "\", port: \""
+                   << expectedSocketAddress.port_value() << "\", transport socket enabled: \""
+                   << expectedCluster.has_transport_socket() << "\"},\n but got {cluster name: \""
+                   << arg.name() << "\", type: \"" << arg.type() << "\", socket address: \""
+                   << argSocketAddress.address() << "\", port: \"" << argSocketAddress.port_value()
+                   << "\", transport socket enabled: \"" << arg.has_transport_socket() << "\"}\n";
+  return ExplainMatchResult(expectedCluster.name(), arg.name(), result_listener) &&
+         ExplainMatchResult(expectedCluster.type(), arg.type(), result_listener) &&
+         ExplainMatchResult(expectedSocketAddress.address(), argSocketAddress.address(),
+                            result_listener) &&
+         ExplainMatchResult(expectedSocketAddress.port_value(), argSocketAddress.port_value(),
+                            result_listener) &&
+         ExplainMatchResult(expectedCluster.has_transport_socket(), arg.has_transport_socket(),
+                            result_listener);
 }
 
 class EvironmentCredentialsProviderTest : public testing::Test {
@@ -493,7 +511,7 @@ typed_extension_protocol_options:
     explicit_http_config:
       http_protocol_options:
         accept_http_10: true
-  )EOF";
+ )EOF";
   MessageUtil::loadFromYaml(kStaticCluster, expected_cluster,
                             ProtobufMessage::getNullValidationVisitor());
 
@@ -1522,7 +1540,7 @@ typed_extension_protocol_options:
     explicit_http_config:
       http_protocol_options:
         accept_http_10: true
-  )EOF";
+ )EOF";
   MessageUtil::loadFromYaml(kStaticCluster, expected_cluster,
                             ProtobufMessage::getNullValidationVisitor());
 
@@ -1974,6 +1992,695 @@ TEST_F(TaskRoleCredentialsProviderUsingLibcurlTest, TimestampCredentialExpiratio
 }
 // End unit test for deprecated option using Libcurl client.
 
+// Begin unit test for new option via Http Async client.
+class WebIdentityCredentialsProviderTest : public testing::Test {
+public:
+  WebIdentityCredentialsProviderTest()
+      : api_(Api::createApiForTest(time_system_)), raw_metadata_fetcher_(new MockMetadataFetcher) {
+    // Tue Jan  2 03:04:05 UTC 2018
+    time_system_.setSystemTime(std::chrono::milliseconds(1514862245000));
+  }
+
+  void setupProvider() {
+    ON_CALL(context_, clusterManager()).WillByDefault(ReturnRef(cluster_manager_));
+    provider_ = std::make_shared<WebIdentityCredentialsProvider>(
+        *api_, context_,
+        [this](Http::RequestMessage& message) -> absl::optional<std::string> {
+          return this->fetch_metadata_.fetch(message);
+        },
+        [this](Upstream::ClusterManager&, absl::string_view) {
+          metadata_fetcher_.reset(raw_metadata_fetcher_);
+          return std::move(metadata_fetcher_);
+        },
+        TestEnvironment::writeStringToFileForTest("web_token_file", "web_token"),
+        "sts.region.amazonaws.com:443", "aws:iam::123456789012:role/arn", "role-session-name",
+        "credentials_provider_cluster");
+  }
+
+  void setupProviderWithContext() {
+    EXPECT_CALL(context_.init_manager_, add(_)).WillOnce(Invoke([this](const Init::Target& target) {
+      init_target_handle_ = target.createHandle("test");
+    }));
+    setupProvider();
+    expected_duration_ = provider_->getCacheDuration();
+    init_target_handle_->initialize(init_watcher_);
+  }
+
+  void expectDocument(const uint64_t status_code, const std::string&& document) {
+    Http::TestRequestHeaderMapImpl headers{{":path",
+                                            "/?Action=AssumeRoleWithWebIdentity"
+                                            "&Version=2011-06-15&RoleSessionName=role-session-name"
+                                            "&RoleArn=aws:iam::123456789012:role/arn"
+                                            "&WebIdentityToken=web_token"},
+                                           {":authority", "sts.region.amazonaws.com"},
+                                           {":scheme", "https"},
+                                           {":method", "GET"}};
+    EXPECT_CALL(*raw_metadata_fetcher_, fetch(messageMatches(headers), _, _))
+        .WillRepeatedly(Invoke([this, status_code, document = std::move(document)](
+                                   Http::RequestMessage&, Tracing::Span&,
+                                   MetadataFetcher::MetadataReceiver& receiver) {
+          if (status_code == enumToInt(Http::Code::OK)) {
+            if (!document.empty()) {
+              receiver.onMetadataSuccess(std::move(document));
+            } else {
+              EXPECT_CALL(
+                  *raw_metadata_fetcher_,
+                  failureToString(Eq(MetadataFetcher::MetadataReceiver::Failure::InvalidMetadata)))
+                  .WillRepeatedly(testing::Return("InvalidMetadata"));
+              receiver.onMetadataError(MetadataFetcher::MetadataReceiver::Failure::InvalidMetadata);
+            }
+          } else {
+            EXPECT_CALL(*raw_metadata_fetcher_,
+                        failureToString(Eq(MetadataFetcher::MetadataReceiver::Failure::Network)))
+                .WillRepeatedly(testing::Return("Network"));
+            receiver.onMetadataError(MetadataFetcher::MetadataReceiver::Failure::Network);
+          }
+        }));
+  }
+
+  TestScopedRuntime scoped_runtime;
+  Event::SimulatedTimeSystem time_system_;
+  Api::ApiPtr api_;
+  NiceMock<MockFetchMetadata> fetch_metadata_;
+  MockMetadataFetcher* raw_metadata_fetcher_;
+  MetadataFetcherPtr metadata_fetcher_;
+  NiceMock<Upstream::MockClusterManager> cluster_manager_;
+  NiceMock<Server::Configuration::MockServerFactoryContext> context_;
+  WebIdentityCredentialsProviderPtr provider_;
+  Init::TargetHandlePtr init_target_handle_;
+  NiceMock<Init::ExpectableWatcherImpl> init_watcher_;
+  Event::MockTimer* timer_{};
+  std::chrono::milliseconds expected_duration_;
+};
+
+TEST_F(WebIdentityCredentialsProviderTest, TestAddMissingCluster) {
+  // Setup without thread local cluster yet
+  envoy::config::cluster::v3::Cluster expected_cluster;
+  constexpr static const char* kStaticCluster = R"EOF(
+name: credentials_provider_cluster
+type: static
+connectTimeout: 2s
+lb_policy: ROUND_ROBIN
+loadAssignment:
+  clusterName: credentials_provider_cluster
+  endpoints:
+  - lbEndpoints:
+    - endpoint:
+        address:
+          socketAddress:
+            address: "sts.region.amazonaws.com"
+            portValue: 443
+typed_extension_protocol_options:
+  envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+    "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+    explicit_http_config:
+      http_protocol_options:
+        accept_http_10: true
+transport_socket:
+  name: envoy.transport_sockets.tls
+  typed_config:
+    "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+ )EOF";
+  MessageUtil::loadFromYaml(kStaticCluster, expected_cluster,
+                            ProtobufMessage::getNullValidationVisitor());
+
+  EXPECT_CALL(cluster_manager_, getThreadLocalCluster(_)).WillOnce(Return(nullptr));
+  EXPECT_CALL(cluster_manager_, addOrUpdateCluster(WithAttribute(expected_cluster), _))
+      .WillOnce(Return(true));
+
+  expectDocument(200, std::move(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>akid</AccessKeyId>
+      <SecretAccessKey>secret</SecretAccessKey>
+      <SessionToken>token</SessionToken>
+      <Expiration>2018-01-02T03:05:00Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF"));
+  setupProviderWithContext();
+}
+
+TEST_F(WebIdentityCredentialsProviderTest, TestClusterMissing) {
+  // Setup without thread local cluster
+  Http::RequestMessageImpl message;
+
+  EXPECT_CALL(cluster_manager_, getThreadLocalCluster(_)).WillOnce(Return(nullptr));
+  EXPECT_CALL(cluster_manager_, addOrUpdateCluster(WithName("credentials_provider_cluster"), _))
+      .WillOnce(Throw(EnvoyException("exeption message")));
+  // init_watcher ready is not called.
+  init_watcher_.expectReady().Times(0);
+  setupProvider();
+  // Below line is not testing anything, will just avoid asan failure with memory leak.
+  metadata_fetcher_.reset(raw_metadata_fetcher_);
+}
+
+TEST_F(WebIdentityCredentialsProviderTest, FailedFetchingDocument) {
+  // Setup timer.
+  timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
+  expectDocument(403 /*Forbidden*/, std::move(std::string()));
+  // init_watcher ready is called.
+  init_watcher_.expectReady();
+  // Expect refresh timer to be started.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+
+  // Cancel is called for fetching once again as previous attempt wasn't a success.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  // Expect refresh timer to be stopped and started.
+  EXPECT_CALL(*timer_, disableTimer());
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderTest, EmptyDocument) {
+  // Setup timer.
+  timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
+  expectDocument(200, std::move(std::string()));
+  // init_watcher ready is called.
+  init_watcher_.expectReady();
+  // Expect refresh timer to be started.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+
+  // Cancel is called for fetching once again as previous attempt wasn't a success.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  // Expect refresh timer to be stopped and started.
+  EXPECT_CALL(*timer_, disableTimer());
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderTest, MalformedDocumenet) {
+  // Setup timer.
+  timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
+
+  expectDocument(200, std::move(R"EOF(
+not xml
+)EOF"));
+  // init_watcher ready is called.
+  init_watcher_.expectReady();
+  // Expect refresh timer to be started.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+
+  // Cancel is called for fetching once again as previous attempt wasn't a success.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  // Expect refresh timer to be stopped and started.
+  EXPECT_CALL(*timer_, disableTimer());
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderTest, UnexpectedResponse) {
+  // Setup timer.
+  timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
+  expectDocument(200, std::move(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <UnexpectedResponse>
+  </UnexpectedResponse>
+</AssumeRoleWithWebIdentityResponse>
+)EOF"));
+  // init_watcher ready is called.
+  init_watcher_.expectReady();
+  // Expect refresh timer to be started.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+
+  // Cancel is called for fetching once again as previous attempt wasn't a success with updating
+  // expiration time.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  // Expect refresh timer to be stopped and started.
+  EXPECT_CALL(*timer_, disableTimer());
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderTest, NoCredentials) {
+  // Setup timer.
+  timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
+  expectDocument(200, std::move(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF"));
+  // init_watcher ready is called.
+  init_watcher_.expectReady();
+  // Expect refresh timer to be started.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+
+  // Cancel is called for fetching once again as previous attempt wasn't a success with updating
+  // expiration time.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  // Expect refresh timer to be stopped and started.
+  EXPECT_CALL(*timer_, disableTimer());
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderTest, EmptyCredentials) {
+  // Setup timer.
+  timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
+  expectDocument(200, std::move(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF"));
+  // init_watcher ready is called.
+  init_watcher_.expectReady();
+  // Expect refresh timer to be started.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+
+  // Cancel is called for fetching once again as previous attempt wasn't a success with updating
+  // expiration time.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  // Expect refresh timer to be stopped and started.
+  EXPECT_CALL(*timer_, disableTimer());
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderTest, FullCachedCredentials) {
+  // Setup timer.
+  timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
+  expectDocument(200, std::move(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>akid</AccessKeyId>
+      <SecretAccessKey>secret</SecretAccessKey>
+      <SessionToken>token</SessionToken>
+      <Expiration>2018-01-02T03:05:00Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF"));
+  // init_watcher ready is called.
+  init_watcher_.expectReady();
+  // Expect refresh timer to be started.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+
+  // init_watcher ready is not called again.
+  init_watcher_.expectReady().Times(0);
+  // No need to restart timer since credentials are fetched from cache.
+  EXPECT_CALL(*timer_, disableTimer()).Times(0);
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr)).Times(0);
+  // We don't expect any more call to cancel or fetch again.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(0);
+  EXPECT_CALL(*raw_metadata_fetcher_, fetch(_, _, _)).Times(0);
+
+  const auto credentials = provider_->getCredentials();
+  EXPECT_EQ("akid", credentials.accessKeyId().value());
+  EXPECT_EQ("secret", credentials.secretAccessKey().value());
+  EXPECT_EQ("token", credentials.sessionToken().value());
+
+  // init_watcher ready is not called again.
+  init_watcher_.expectReady().Times(0);
+  // No need to restart timer since credentials are fetched from cache.
+  EXPECT_CALL(*timer_, disableTimer()).Times(0);
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr)).Times(0);
+  // We don't expect any more call to cancel or fetch again.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(0);
+  EXPECT_CALL(*raw_metadata_fetcher_, fetch(_, _, _)).Times(0);
+
+  const auto cached_credentials = provider_->getCredentials();
+  EXPECT_EQ("akid", cached_credentials.accessKeyId().value());
+  EXPECT_EQ("secret", cached_credentials.secretAccessKey().value());
+  EXPECT_EQ("token", cached_credentials.sessionToken().value());
+}
+
+TEST_F(WebIdentityCredentialsProviderTest, RefreshOnNormalCredentialExpiration) {
+  // Setup timer.
+  timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
+
+  expectDocument(200, std::move(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>akid</AccessKeyId>
+      <SecretAccessKey>secret</SecretAccessKey>
+      <SessionToken>token</SessionToken>
+      <Expiration>2018-01-02T04:04:05Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF"));
+  // init_watcher ready is called.
+  init_watcher_.expectReady();
+  // Expect refresh timer to be started.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+
+  // init_watcher ready is not called again.
+  init_watcher_.expectReady().Times(0);
+  // No need to restart timer since credentials are fetched from cache.
+  EXPECT_CALL(*timer_, disableTimer()).Times(0);
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr)).Times(0);
+  // We don't expect any more call to cancel or fetch again.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(0);
+  EXPECT_CALL(*raw_metadata_fetcher_, fetch(_, _, _)).Times(0);
+
+  const auto credentials = provider_->getCredentials();
+  EXPECT_EQ("akid", credentials.accessKeyId().value());
+  EXPECT_EQ("secret", credentials.secretAccessKey().value());
+  EXPECT_EQ("token", credentials.sessionToken().value());
+
+  expectDocument(200, std::move(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>new_akid</AccessKeyId>
+      <SecretAccessKey>new_secret</SecretAccessKey>
+      <SessionToken>new_token</SessionToken>
+      <Expiration>2019-01-02T03:05:00Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF"));
+  // Expect timer to have expired but we would re-start the timer eventually after refresh.
+  EXPECT_CALL(*timer_, disableTimer()).Times(0);
+  // Cancel will be called once more.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  time_system_.advanceTimeWait(std::chrono::minutes(61));
+  timer_->invokeCallback();
+
+  // We don't expect timer to be reset again for new fetch.
+  EXPECT_CALL(*timer_, disableTimer()).Times(0);
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr)).Times(0);
+  // Similarly we won't call fetch or cancel on metadata fetcher.
+  EXPECT_CALL(*raw_metadata_fetcher_, fetch(_, _, _)).Times(0);
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel()).Times(0);
+
+  const auto cached_credentials = provider_->getCredentials();
+  EXPECT_EQ("new_akid", cached_credentials.accessKeyId().value());
+  EXPECT_EQ("new_secret", cached_credentials.secretAccessKey().value());
+  EXPECT_EQ("new_token", cached_credentials.sessionToken().value());
+}
+
+TEST_F(WebIdentityCredentialsProviderTest, TimestampCredentialExpiration) {
+  // Setup timer.
+  timer_ = new NiceMock<Event::MockTimer>(&context_.dispatcher_);
+  expectDocument(200, std::move(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>akid</AccessKeyId>
+      <SecretAccessKey>secret</SecretAccessKey>
+      <SessionToken>token</SessionToken>
+      <Expiration>2018-01-02T03:04:05Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF"));
+  // init_watcher ready is called.
+  init_watcher_.expectReady();
+  // Expect refresh timer to be started.
+  EXPECT_CALL(*timer_, enableTimer(_, nullptr));
+  setupProviderWithContext();
+
+  // init_watcher ready is not called again.
+  init_watcher_.expectReady().Times(0);
+  // Need to disable and restart timer since credentials are expired and fetched again
+  EXPECT_CALL(*timer_, disableTimer());
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  // We call cancel once.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+
+  const auto credentials = provider_->getCredentials();
+  EXPECT_EQ("akid", credentials.accessKeyId().value());
+  EXPECT_EQ("secret", credentials.secretAccessKey().value());
+  EXPECT_EQ("token", credentials.sessionToken().value());
+
+  // Cancel is called once.
+  EXPECT_CALL(*raw_metadata_fetcher_, cancel());
+  expectDocument(200, std::move(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>new_akid</AccessKeyId>
+      <SecretAccessKey>new_secret</SecretAccessKey>
+      <SessionToken>new_token</SessionToken>
+      <Expiration>2019-01-02T03:04:05Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF"));
+  // Expect refresh timer to be stopped and started.
+  EXPECT_CALL(*timer_, disableTimer());
+  EXPECT_CALL(*timer_, enableTimer(expected_duration_, nullptr));
+  const auto cached_credentials = provider_->getCredentials();
+  EXPECT_EQ("new_akid", cached_credentials.accessKeyId().value());
+  EXPECT_EQ("new_secret", cached_credentials.secretAccessKey().value());
+  EXPECT_EQ("new_token", cached_credentials.sessionToken().value());
+}
+// End unit test for new option via Http Async client.
+
+// Begin unit test for deprecated option using Libcurl client.
+// TODO(suniltheta): Remove this test class once libcurl is removed from Envoy.
+class WebIdentityCredentialsProviderUsingLibcurlTest : public testing::Test {
+public:
+  WebIdentityCredentialsProviderUsingLibcurlTest() : api_(Api::createApiForTest(time_system_)) {
+    // Tue Jan  2 03:04:05 UTC 2018
+    time_system_.setSystemTime(std::chrono::milliseconds(1514862245000));
+  }
+
+  void setupProvider() {
+    scoped_runtime.mergeValues(
+        {{"envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials", "true"}});
+    provider_ = std::make_shared<WebIdentityCredentialsProvider>(
+        *api_, absl::nullopt,
+        [this](Http::RequestMessage& message) -> absl::optional<std::string> {
+          return this->fetch_metadata_.fetch(message);
+        },
+        nullptr, TestEnvironment::writeStringToFileForTest("web_token_file", "web_token"),
+        "sts.region.amazonaws.com:443", "aws:iam::123456789012:role/arn", "role-session-name",
+        "credentials_provider_cluster");
+  }
+
+  void expectDocument(const absl::optional<std::string>& document) {
+    Http::TestRequestHeaderMapImpl headers{{":path",
+                                            "/?Action=AssumeRoleWithWebIdentity"
+                                            "&Version=2011-06-15&RoleSessionName=role-session-name"
+                                            "&RoleArn=aws:iam::123456789012:role/arn"
+                                            "&WebIdentityToken=web_token"},
+                                           {":authority", "sts.region.amazonaws.com"},
+                                           {":scheme", "https"},
+                                           {":method", "GET"}};
+    EXPECT_CALL(fetch_metadata_, fetch(messageMatches(headers))).WillOnce(Return(document));
+  }
+
+  TestScopedRuntime scoped_runtime;
+  Event::SimulatedTimeSystem time_system_;
+  Api::ApiPtr api_;
+  NiceMock<MockFetchMetadata> fetch_metadata_;
+  WebIdentityCredentialsProviderPtr provider_;
+};
+
+TEST_F(WebIdentityCredentialsProviderUsingLibcurlTest, FailedFetchingDocument) {
+  setupProvider();
+  expectDocument(absl::optional<std::string>());
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderUsingLibcurlTest, MalformedDocumenet) {
+  setupProvider();
+  expectDocument(R"EOF(
+not xml
+)EOF");
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderUsingLibcurlTest, UnexpectedResponse) {
+  setupProvider();
+  expectDocument(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <UnexpectedResponse>
+  </UnexpectedResponse>
+</AssumeRoleWithWebIdentityResponse>
+)EOF");
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderUsingLibcurlTest, NoCredentials) {
+  setupProvider();
+  expectDocument(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF");
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderUsingLibcurlTest, EmptyCredentials) {
+  setupProvider();
+  expectDocument(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF");
+  const auto credentials = provider_->getCredentials();
+  EXPECT_FALSE(credentials.accessKeyId().has_value());
+  EXPECT_FALSE(credentials.secretAccessKey().has_value());
+  EXPECT_FALSE(credentials.sessionToken().has_value());
+}
+
+TEST_F(WebIdentityCredentialsProviderUsingLibcurlTest, CachedCredentials) {
+  setupProvider();
+  // We will fetch the credentials once
+  expectDocument(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>akid</AccessKeyId>
+      <SecretAccessKey>secret</SecretAccessKey>
+      <SessionToken>token</SessionToken>
+      <Expiration>2018-01-02T03:05:00Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF");
+  const auto credentials = provider_->getCredentials();
+  EXPECT_EQ("akid", credentials.accessKeyId().value());
+  EXPECT_EQ("secret", credentials.secretAccessKey().value());
+  EXPECT_EQ("token", credentials.sessionToken().value());
+
+  // We don't need to expect another credential fetch since the credentials are cached
+  const auto cached_credentials = provider_->getCredentials();
+  EXPECT_EQ("akid", cached_credentials.accessKeyId().value());
+  EXPECT_EQ("secret", cached_credentials.secretAccessKey().value());
+  EXPECT_EQ("token", cached_credentials.sessionToken().value());
+}
+
+TEST_F(WebIdentityCredentialsProviderUsingLibcurlTest, NormalCredentialExpiration) {
+  setupProvider();
+  // We will fetch credentials that expire in 1 hour
+  expectDocument(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>akid</AccessKeyId>
+      <SecretAccessKey>secret</SecretAccessKey>
+      <SessionToken>token</SessionToken>
+      <Expiration>2018-01-02T04:04:05Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF");
+  const auto credentials = provider_->getCredentials();
+  EXPECT_EQ("akid", credentials.accessKeyId().value());
+  EXPECT_EQ("secret", credentials.secretAccessKey().value());
+  EXPECT_EQ("token", credentials.sessionToken().value());
+
+  // We will fetch the credentials again since they have expired after 2 hours
+  time_system_.advanceTimeWait(std::chrono::hours(2));
+  expectDocument(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>new_akid</AccessKeyId>
+      <SecretAccessKey>new_secret</SecretAccessKey>
+      <SessionToken>new_token</SessionToken>
+      <Expiration>2019-01-02T03:05:00Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF");
+  const auto cached_credentials = provider_->getCredentials();
+  EXPECT_EQ("new_akid", cached_credentials.accessKeyId().value());
+  EXPECT_EQ("new_secret", cached_credentials.secretAccessKey().value());
+  EXPECT_EQ("new_token", cached_credentials.sessionToken().value());
+}
+
+TEST_F(WebIdentityCredentialsProviderUsingLibcurlTest, TimestampCredentialExpiration) {
+  setupProvider();
+  // We will fetch credentials that expire right now
+  expectDocument(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>akid</AccessKeyId>
+      <SecretAccessKey>secret</SecretAccessKey>
+      <SessionToken>token</SessionToken>
+      <Expiration>2018-01-02T03:04:05Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF");
+  const auto credentials = provider_->getCredentials();
+  EXPECT_EQ("akid", credentials.accessKeyId().value());
+  EXPECT_EQ("secret", credentials.secretAccessKey().value());
+  EXPECT_EQ("token", credentials.sessionToken().value());
+
+  // We will fetch credentials again since they were already expired
+  expectDocument(R"EOF(
+<AssumeRoleWithWebIdentityResponse>
+  <AssumeRoleWithWebIdentityResult>
+    <Credentials>
+      <AccessKeyId>new_akid</AccessKeyId>
+      <SecretAccessKey>new_secret</SecretAccessKey>
+      <SessionToken>new_token</SessionToken>
+      <Expiration>2019-01-02T03:04:05Z</Expiration>
+    </Credentials>
+  </AssumeRoleWithWebIdentityResult>
+</AssumeRoleWithWebIdentityResponse>
+)EOF");
+  const auto cached_credentials = provider_->getCredentials();
+  EXPECT_EQ("new_akid", cached_credentials.accessKeyId().value());
+  EXPECT_EQ("new_secret", cached_credentials.secretAccessKey().value());
+  EXPECT_EQ("new_token", cached_credentials.sessionToken().value());
+}
+// End unit test for deprecated option using Libcurl client.
+
 class DefaultCredentialsProviderChainTest : public testing::Test {
 public:
   DefaultCredentialsProviderChainTest() : api_(Api::createApiForTest(time_system_)) {
@@ -1987,12 +2694,21 @@ public:
     TestEnvironment::unsetEnvVar("AWS_CONTAINER_CREDENTIALS_FULL_URI");
     TestEnvironment::unsetEnvVar("AWS_CONTAINER_AUTHORIZATION_TOKEN");
     TestEnvironment::unsetEnvVar("AWS_EC2_METADATA_DISABLED");
+    TestEnvironment::unsetEnvVar("AWS_WEB_IDENTITY_TOKEN_FILE");
+    TestEnvironment::unsetEnvVar("AWS_ROLE_ARN");
+    TestEnvironment::unsetEnvVar("AWS_ROLE_SESSION_NAME");
   }
 
   class MockCredentialsProviderChainFactories : public CredentialsProviderChainFactories {
   public:
     MOCK_METHOD(CredentialsProviderSharedPtr, createEnvironmentCredentialsProvider, (), (const));
     MOCK_METHOD(CredentialsProviderSharedPtr, createCredentialsFileCredentialsProvider, (Api::Api&),
+                (const));
+    MOCK_METHOD(CredentialsProviderSharedPtr, createWebIdentityCredentialsProvider,
+                (Api::Api&, ServerFactoryContextOptRef,
+                 const MetadataCredentialsProviderBase::CurlMetadataFetcher&,
+                 CreateMetadataFetcherCb, absl::string_view, absl::string_view, absl::string_view,
+                 absl::string_view, absl::string_view),
                 (const));
     MOCK_METHOD(CredentialsProviderSharedPtr, createTaskRoleCredentialsProvider,
                 (Api::Api&, ServerFactoryContextOptRef,
@@ -2016,7 +2732,8 @@ public:
 TEST_F(DefaultCredentialsProviderChainTest, NoEnvironmentVars) {
   EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_)));
   EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _, _, _));
-  DefaultCredentialsProviderChain chain(*api_, context_, DummyFetchMetadata(), factories_);
+  DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, CredentialsFileDisabled) {
@@ -2024,7 +2741,8 @@ TEST_F(DefaultCredentialsProviderChainTest, CredentialsFileDisabled) {
   scoped_runtime.mergeValues({{"envoy.reloadable_features.enable_aws_credentials_file", "false"}});
   EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_))).Times(0);
   EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _, _, _));
-  DefaultCredentialsProviderChain chain(*api_, context_, DummyFetchMetadata(), factories_);
+  DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, MetadataDisabled) {
@@ -2032,14 +2750,16 @@ TEST_F(DefaultCredentialsProviderChainTest, MetadataDisabled) {
   EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_)));
   EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _, _, _))
       .Times(0);
-  DefaultCredentialsProviderChain chain(*api_, context_, DummyFetchMetadata(), factories_);
+  DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, MetadataNotDisabled) {
   TestEnvironment::setEnvVar("AWS_EC2_METADATA_DISABLED", "false", 1);
   EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_)));
   EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _, _, _));
-  DefaultCredentialsProviderChain chain(*api_, context_, DummyFetchMetadata(), factories_);
+  DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, RelativeUri) {
@@ -2047,7 +2767,8 @@ TEST_F(DefaultCredentialsProviderChainTest, RelativeUri) {
   EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_)));
   EXPECT_CALL(factories_, createTaskRoleCredentialsProvider(Ref(*api_), _, _, _, _,
                                                             "169.254.170.2:80/path/to/creds", ""));
-  DefaultCredentialsProviderChain chain(*api_, context_, DummyFetchMetadata(), factories_);
+  DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, FullUriNoAuthorizationToken) {
@@ -2055,7 +2776,8 @@ TEST_F(DefaultCredentialsProviderChainTest, FullUriNoAuthorizationToken) {
   EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_)));
   EXPECT_CALL(factories_, createTaskRoleCredentialsProvider(Ref(*api_), _, _, _, _,
                                                             "http://host/path/to/creds", ""));
-  DefaultCredentialsProviderChain chain(*api_, context_, DummyFetchMetadata(), factories_);
+  DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
+                                        factories_);
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, FullUriWithAuthorizationToken) {
@@ -2064,7 +2786,45 @@ TEST_F(DefaultCredentialsProviderChainTest, FullUriWithAuthorizationToken) {
   EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_)));
   EXPECT_CALL(factories_, createTaskRoleCredentialsProvider(
                               Ref(*api_), _, _, _, _, "http://host/path/to/creds", "auth_token"));
-  DefaultCredentialsProviderChain chain(*api_, context_, DummyFetchMetadata(), factories_);
+  DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
+                                        factories_);
+}
+
+TEST_F(DefaultCredentialsProviderChainTest, NoWebIdentityRoleArn) {
+  TestEnvironment::setEnvVar("AWS_WEB_IDENTITY_TOKEN_FILE", "/path/to/web_token", 1);
+  EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_)));
+  EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _, _, _));
+  DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
+                                        factories_);
+}
+
+TEST_F(DefaultCredentialsProviderChainTest, NoWebIdentitySessionName) {
+  TestEnvironment::setEnvVar("AWS_WEB_IDENTITY_TOKEN_FILE", "/path/to/web_token", 1);
+  TestEnvironment::setEnvVar("AWS_ROLE_ARN", "aws:iam::123456789012:role/arn", 1);
+  time_system_.setSystemTime(std::chrono::nanoseconds(1234567890000000));
+  EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_)));
+  EXPECT_CALL(factories_,
+              createWebIdentityCredentialsProvider(
+                  Ref(*api_), _, _, _, _, "/path/to/web_token", "sts.region.amazonaws.com:443",
+                  "aws:iam::123456789012:role/arn", "1234567890000000"));
+  EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _, _, _));
+
+  DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
+                                        factories_);
+}
+
+TEST_F(DefaultCredentialsProviderChainTest, WebIdentityWithSessionName) {
+  TestEnvironment::setEnvVar("AWS_WEB_IDENTITY_TOKEN_FILE", "/path/to/web_token", 1);
+  TestEnvironment::setEnvVar("AWS_ROLE_ARN", "aws:iam::123456789012:role/arn", 1);
+  TestEnvironment::setEnvVar("AWS_ROLE_SESSION_NAME", "role-session-name", 1);
+  EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_)));
+  EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _, _, _));
+  EXPECT_CALL(factories_,
+              createWebIdentityCredentialsProvider(
+                  Ref(*api_), _, _, _, _, "/path/to/web_token", "sts.region.amazonaws.com:443",
+                  "aws:iam::123456789012:role/arn", "role-session-name"));
+  DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
+                                        factories_);
 }
 
 TEST(CredentialsProviderChainTest, getCredentials_noCredentials) {
