@@ -316,8 +316,9 @@ absl::optional<std::string> Utility::fetchMetadata(Http::RequestMessage& message
   return buffer.empty() ? absl::nullopt : absl::optional<std::string>(buffer);
 }
 
-bool Utility::addInternalClusterStatic(Upstream::ClusterManager& cm, absl::string_view cluster_name,
-                                       absl::string_view cluster_type, absl::string_view uri) {
+bool Utility::addInternalClusterStatic(
+    Upstream::ClusterManager& cm, absl::string_view cluster_name,
+    const envoy::config::cluster::v3::Cluster::DiscoveryType cluster_type, absl::string_view uri) {
   // Check if local cluster exists with that name.
   if (cm.getThreadLocalCluster(cluster_name) == nullptr) {
     // Make sure we run this on main thread.
@@ -325,48 +326,38 @@ bool Utility::addInternalClusterStatic(Upstream::ClusterManager& cm, absl::strin
       envoy::config::cluster::v3::Cluster cluster;
       absl::string_view host_port;
       absl::string_view path;
-      absl::string_view transport_socket = "";
       Http::Utility::extractHostPathFromUri(uri, host_port, path);
       const auto host_attributes = Http::Utility::parseAuthority(host_port);
       const auto host = host_attributes.host_;
       const auto port = host_attributes.port_ ? host_attributes.port_.value() : 80;
+
+      cluster.set_name(cluster_name);
+      cluster.set_type(cluster_type);
+      cluster.mutable_connect_timeout()->set_seconds(5);
+      cluster.mutable_load_assignment()->set_cluster_name(cluster_name);
+      auto* endpoint = cluster.mutable_load_assignment()
+                           ->add_endpoints()
+                           ->add_lb_endpoints()
+                           ->mutable_endpoint();
+      auto* addr = endpoint->mutable_address();
+      addr->mutable_socket_address()->set_address(host);
+      addr->mutable_socket_address()->set_port_value(port);
+      cluster.set_lb_policy(envoy::config::cluster::v3::Cluster::ROUND_ROBIN);
+      envoy::extensions::upstreams::http::v3::HttpProtocolOptions protocol_options;
+      auto* http_protocol_options =
+          protocol_options.mutable_explicit_http_config()->mutable_http_protocol_options();
+      http_protocol_options->set_accept_http_10(true);
+      (*cluster.mutable_typed_extension_protocol_options())
+          ["envoy.extensions.upstreams.http.v3.HttpProtocolOptions"]
+              .PackFrom(protocol_options);
+
       // Add tls transport socket if cluster supports https over port 443.
       if (port == 443) {
-        transport_socket = R"(
-transport_socket:
-  name: envoy.transport_sockets.tls
-  typed_config:
-    "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
-)";
+        auto* socket = cluster.mutable_transport_socket();
+        envoy::extensions::transport_sockets::tls::v3::UpstreamTlsContext tls_socket;
+        socket->set_name("envoy.transport_sockets.tls");
+        socket->mutable_typed_config()->PackFrom(tls_socket);
       }
-
-      MessageUtil::loadFromYaml(fmt::format(R"EOF(
-name: {cluster_name}
-type: {cluster_type}
-connectTimeout: 5s
-lb_policy: ROUND_ROBIN
-loadAssignment:
-  clusterName: {cluster_name}
-  endpoints:
-  - lbEndpoints:
-    - endpoint:
-        address:
-          socketAddress:
-            address: {host}
-            portValue: {port}
-typed_extension_protocol_options:
-  envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
-    "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
-    explicit_http_config:
-      http_protocol_options:
-        accept_http_10: true
-{transport_socket}
-  )EOF",
-                                            fmt::arg("cluster_name", cluster_name),
-                                            fmt::arg("cluster_type", cluster_type),
-                                            fmt::arg("host", host), fmt::arg("port", port),
-                                            fmt::arg("transport_socket", transport_socket)),
-                                cluster, ProtobufMessage::getNullValidationVisitor());
 
       // TODO(suniltheta): use random number generator here for cluster version.
       cm.addOrUpdateCluster(cluster, "12345");

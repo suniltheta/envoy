@@ -111,8 +111,8 @@ MetadataCredentialsProviderBase::MetadataCredentialsProviderBase(
       debug_name_(absl::StrCat("Fetching aws credentials from cluster=", cluster_name)) {
   if (context_) {
     context_->mainThreadDispatcher().post([this, uri]() {
-      if (!Utility::addInternalClusterStatic(context_->clusterManager(), cluster_name_, "STATIC",
-                                             uri)) {
+      if (!Utility::addInternalClusterStatic(context_->clusterManager(), cluster_name_,
+                                             envoy::config::cluster::v3::Cluster::STATIC, uri)) {
         ENVOY_LOG(critical,
                   "Failed to add [STATIC cluster = {} with address = {}] or cluster not found",
                   cluster_name_, uri);
