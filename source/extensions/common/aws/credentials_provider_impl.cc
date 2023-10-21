@@ -484,9 +484,8 @@ TaskRoleCredentialsProvider::TaskRoleCredentialsProvider(
 
 bool TaskRoleCredentialsProvider::needsRefresh() {
   const auto now = api_.timeSource().systemTime();
-  bool needs_refresh =
-      (now - last_updated_ > REFRESH_INTERVAL) || (expiration_time_ - now < REFRESH_GRACE_PERIOD);
-  return needs_refresh;
+  return (now - last_updated_ > REFRESH_INTERVAL) ||
+         (expiration_time_ - now < REFRESH_GRACE_PERIOD);
 }
 
 void TaskRoleCredentialsProvider::refresh() {
@@ -660,6 +659,7 @@ void WebIdentityCredentialsProvider::extractCredentials(
 
   tinyxml2::XMLDocument document_xml;
   if (document_xml.Parse(credential_document_value.c_str()) != tinyxml2::XML_SUCCESS) {
+    handleFetchDone();
     ENVOY_LOG(error, "Could not parse AWS credentials document from STS: {}",
               document_xml.ErrorStr());
     return;
@@ -720,7 +720,14 @@ void WebIdentityCredentialsProvider::extractCredentials(
   }
 
   last_updated_ = api_.timeSource().systemTime();
-  cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
+  if (!Runtime::runtimeFeatureEnabled(
+          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") &&
+      context_) {
+    setCredentialsToAllThreads(
+        std::make_unique<Credentials>(access_key_id, secret_access_key, session_token));
+  } else {
+    cached_credentials_ = Credentials(access_key_id, secret_access_key, session_token);
+  }
   handleFetchDone();
 }
 

@@ -241,10 +241,6 @@ private:
 
   bool needsRefresh() override;
   void refresh() override;
-
-  void fetchInstanceRole(const std::string&& token);
-  void fetchCredentialFromInstanceRole(const std::string&& instance_role,
-                                       const std::string&& token);
   void extractCredentials(const std::string&& credential_document_value);
 };
 
