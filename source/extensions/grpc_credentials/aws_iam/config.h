@@ -4,6 +4,7 @@
 #include "envoy/config/grpc_credential/v3/aws_iam.pb.h"
 #include "envoy/grpc/google_grpc_creds.h"
 #include "envoy/http/header_map.h"
+#include "envoy/upstream/cluster_manager.h"
 
 #include "source/common/http/message_impl.h"
 #include "source/extensions/common/aws/signer.h"
@@ -20,7 +21,7 @@ class AwsIamGrpcCredentialsFactory : public Grpc::GoogleGrpcCredentialsFactory {
 public:
   std::shared_ptr<grpc::ChannelCredentials>
   getChannelCredentials(const envoy::config::core::v3::GrpcService& grpc_service_config,
-                        Api::Api& api) override;
+                        Api::Api& api, Upstream::ClusterManager& cm) override;
 
   Envoy::ProtobufTypes::MessagePtr createEmptyConfigProto() {
     return std::make_unique<envoy::config::grpc_credential::v3::AwsIamConfig>();

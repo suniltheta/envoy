@@ -18,6 +18,7 @@ envoy_cc_extension(
     deps = [
         "//envoy/grpc:google_grpc_creds_interface",
         "//envoy/registry",
+        "//envoy/upstream:cluster_manager_interface",
         "//source/common/config:utility_lib",
         "//source/common/grpc:common_lib",
         "//source/common/grpc:google_grpc_creds_lib",
