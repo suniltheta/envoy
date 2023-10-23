@@ -52,6 +52,26 @@ public:
     ASSERT(!receiver_);
     complete_ = false;
     receiver_ = makeOptRef(receiver);
+
+    if (cluster_name_.empty()) {
+      ENVOY_LOG(error, "{}: AWS Metadata failed: cluster name is not configured",
+                __func__);
+      complete_ = true;
+      receiver_->onMetadataError(
+          MetadataFetcher::MetadataReceiver::Failure::MissingConfig);
+      reset();
+      return;
+    }
+
+    if (!Utility::addInternalClusterStatic(cm_, cluster_name_, envoy::config::cluster::v3::Cluster::STATIC, message.headers().getHostValue())) {
+      ENVOY_LOG(error, "{}: AWS Metadata failed: Failed to add [cluster = {}]", __func__,
+                cluster_name_);
+      complete_ = true;
+      receiver_->onMetadataError(MetadataFetcher::MetadataReceiver::Failure::MissingConfig);
+      reset();
+      return;
+    }
+
     const auto thread_local_cluster = cm_.getThreadLocalCluster(cluster_name_);
     if (thread_local_cluster == nullptr) {
       ENVOY_LOG(error, "{} AWS Metadata failed: [cluster = {}] not found", __func__, cluster_name_);
@@ -157,9 +177,9 @@ public:
 
 private:
   Upstream::ClusterManager& cm_;
+  const std::string cluster_name_;
   bool complete_{};
   OptRef<MetadataFetcher::MetadataReceiver> receiver_;
-  std::string cluster_name_;
   OptRef<Http::AsyncClient::Request> request_;
 
   void reset() {

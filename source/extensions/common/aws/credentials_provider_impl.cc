@@ -292,8 +292,7 @@ void InstanceProfileCredentialsProvider::refresh() {
                                       EC2_IMDS_TOKEN_TTL_DEFAULT_VALUE);
 
   if (Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") ||
-      !context_) {
+          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
     // Using curl to fetch the AWS credentials where we first get the token.
     const auto token_string = fetch_metadata_using_curl_(token_req_message);
     if (token_string) {
@@ -311,7 +310,7 @@ void InstanceProfileCredentialsProvider::refresh() {
     }
     // Using Http async client to fetch the AWS credentials where we first get the token.
     if (!metadata_fetcher_) {
-      metadata_fetcher_ = create_metadata_fetcher_cb_(context_->clusterManager(), clusterName());
+      metadata_fetcher_ = create_metadata_fetcher_cb_(cm_/*context_->clusterManager()*/, clusterName());
     } else {
       metadata_fetcher_->cancel(); // Cancel if there is any inflight request.
     }
@@ -502,8 +501,7 @@ void TaskRoleCredentialsProvider::refresh() {
   message.headers().setPath(path);
   message.headers().setCopy(Http::CustomHeaders::get().Authorization, authorization_token_);
   if (Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") ||
-      !context_) {
+          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
     // Using curl to fetch the AWS credentials.
     const auto credential_document = fetch_metadata_using_curl_(message);
     if (!credential_document) {
@@ -518,7 +516,7 @@ void TaskRoleCredentialsProvider::refresh() {
     }
     // Using Http async client to fetch the AWS credentials.
     if (!metadata_fetcher_) {
-      metadata_fetcher_ = create_metadata_fetcher_cb_(context_->clusterManager(), clusterName());
+      metadata_fetcher_ = create_metadata_fetcher_cb_(cm_/*context_->clusterManager()*/, clusterName());
     } else {
       metadata_fetcher_->cancel(); // Cancel if there is any inflight request.
     }
@@ -563,8 +561,7 @@ void TaskRoleCredentialsProvider::extractCredentials(
 
   last_updated_ = api_.timeSource().systemTime();
   if (!Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") &&
-      context_) {
+          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
     setCredentialsToAllThreads(
         std::make_unique<Credentials>(access_key_id, secret_access_key, session_token));
   } else {
@@ -623,8 +620,7 @@ void WebIdentityCredentialsProvider::refresh() {
                   Http::Utility::PercentEncoding::encode(web_token_file_or_error.value())));
 
   if (Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") ||
-      !context_) {
+          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
     // Using curl to fetch the AWS credentials.
     const auto credential_document = fetch_metadata_using_curl_(message);
     if (!credential_document) {
@@ -639,7 +635,7 @@ void WebIdentityCredentialsProvider::refresh() {
     }
     // Using Http async client to fetch the AWS credentials.
     if (!metadata_fetcher_) {
-      metadata_fetcher_ = create_metadata_fetcher_cb_(context_->clusterManager(), clusterName());
+      metadata_fetcher_ = create_metadata_fetcher_cb_(cm_/*context_->clusterManager()*/, clusterName());
     } else {
       metadata_fetcher_->cancel(); // Cancel if there is any inflight request.
     }
@@ -722,8 +718,7 @@ void WebIdentityCredentialsProvider::extractCredentials(
 
   last_updated_ = api_.timeSource().systemTime();
   if (!Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") &&
-      context_) {
+          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
     setCredentialsToAllThreads(
         std::make_unique<Credentials>(access_key_id, secret_access_key, session_token));
   } else {

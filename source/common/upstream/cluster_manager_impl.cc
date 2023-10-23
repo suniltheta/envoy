@@ -88,14 +88,21 @@ getOrigin(const Network::TransportSocketOptionsConstSharedPtr& options, HostCons
 
 bool isBlockingAdsCluster(const envoy::config::bootstrap::v3::Bootstrap& bootstrap,
                           absl::string_view cluster_name) {
+
   if (bootstrap.dynamic_resources().has_ads_config()) {
     const auto& ads_config_source = bootstrap.dynamic_resources().ads_config();
     // We only care about EnvoyGrpc, not GoogleGrpc, because we only need to delay ADS mux
     // initialization if it uses an Envoy cluster that needs to be initialized first. We don't
     // depend on the same cluster initialization when opening a gRPC stream for GoogleGrpc.
-    return (ads_config_source.grpc_services_size() > 0 &&
-            ads_config_source.grpc_services(0).has_envoy_grpc() &&
-            ads_config_source.grpc_services(0).envoy_grpc().cluster_name() == cluster_name);
+    // return (ads_config_source.grpc_services_size() > 0 &&
+    //         ads_config_source.grpc_services(0).has_envoy_grpc() &&
+    //         ads_config_source.grpc_services(0).envoy_grpc().cluster_name() == cluster_name);
+
+    return ads_config_source.grpc_services_size() > 0 &&
+        ads_config_source.grpc_services(0).has_google_grpc() &&
+        ("ec2_instance_metadata_server_internal" == cluster_name
+        || "ecs_task_metadata_server_internal" == cluster_name
+        || "sts_token_service_internal" == cluster_name);
   }
   return false;
 }
@@ -400,6 +407,7 @@ void ClusterManagerImpl::init(const envoy::config::bootstrap::v3::Bootstrap& boo
   for (const auto& cluster : bootstrap.static_resources().clusters()) {
     if (is_primary_cluster(cluster)) {
       const bool required_for_ads = isBlockingAdsCluster(bootstrap, cluster.name());
+      ENVOY_LOG(error, "cm init: isBlockingAdsCluster:{}: cluster={}", required_for_ads, cluster.name());
       has_ads_cluster |= required_for_ads;
       // TODO(abeyad): Consider passing a lambda for a "post-cluster-init" callback, which would
       // include a conditional ads_mux_->start() call, if other uses cases for "post-cluster-init"
@@ -482,6 +490,7 @@ void ClusterManagerImpl::init(const envoy::config::bootstrap::v3::Bootstrap& boo
         !Config::SubscriptionFactory::isPathBasedConfigSource(
             cluster.eds_cluster_config().eds_config().config_source_specifier_case())) {
       const bool required_for_ads = isBlockingAdsCluster(bootstrap, cluster.name());
+      ENVOY_LOG(error, "cm init: isBlockingAdsCluster:{}: cluster={}", required_for_ads, cluster.name());
       has_ads_cluster |= required_for_ads;
       loadCluster(cluster, MessageUtil::hash(cluster), "", /*added_via_api=*/false,
                   required_for_ads, active_clusters_);
