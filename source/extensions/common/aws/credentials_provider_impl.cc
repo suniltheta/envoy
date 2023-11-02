@@ -125,15 +125,13 @@ MetadataCredentialsProviderBase::MetadataCredentialsProviderBase(
         [](Envoy::Event::Dispatcher&) { return std::make_shared<ThreadLocalCredentialsCache>(); });
 
     cache_duration_timer_ = context_->mainThreadDispatcher().createTimer([this]() -> void {
-      if (!Runtime::runtimeFeatureEnabled(
-              "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
+      if (useHttpAsyncClient()) {
         const Thread::LockGuard lock(lock_);
         refresh();
       }
     });
 
-    if (!Runtime::runtimeFeatureEnabled(
-            "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials")) {
+    if (useHttpAsyncClient()) {
       // Register with init_manager, force the listener to wait for fetching (refresh).
       init_target_ =
           std::make_unique<Init::TargetImpl>(debug_name_, [this]() -> void { refresh(); });
@@ -144,9 +142,7 @@ MetadataCredentialsProviderBase::MetadataCredentialsProviderBase(
 
 Credentials MetadataCredentialsProviderBase::getCredentials() {
   refreshIfNeeded();
-  if (!Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") &&
-      context_ && tls_) {
+  if (useHttpAsyncClient() && context_ && tls_) {
     // If server factor context was supplied then we would have thread local slot initialized.
     return *(*tls_)->credentials_.get();
   } else {
@@ -162,9 +158,7 @@ std::chrono::seconds MetadataCredentialsProviderBase::getCacheDuration() {
 }
 
 void MetadataCredentialsProviderBase::handleFetchDone() {
-  if (!Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") &&
-      context_) {
+  if (useHttpAsyncClient() && context_) {
     if (init_target_) {
       init_target_->ready();
       init_target_.reset();
@@ -183,6 +177,11 @@ void MetadataCredentialsProviderBase::setCredentialsToAllThreads(
       obj->credentials_ = shared_credentials;
     });
   }
+}
+
+bool MetadataCredentialsProviderBase::useHttpAsyncClient() {
+  return !Runtime::runtimeFeatureEnabled(
+      "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials");
 }
 
 bool CredentialsFileCredentialsProvider::needsRefresh() {
@@ -291,9 +290,7 @@ void InstanceProfileCredentialsProvider::refresh() {
   token_req_message.headers().setCopy(Http::LowerCaseString(EC2_IMDS_TOKEN_TTL_HEADER),
                                       EC2_IMDS_TOKEN_TTL_DEFAULT_VALUE);
 
-  if (Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") ||
-      !context_) {
+  if (!useHttpAsyncClient() || !context_) {
     // Using curl to fetch the AWS credentials where we first get the token.
     const auto token_string = fetch_metadata_using_curl_(token_req_message);
     if (token_string) {
@@ -441,9 +438,7 @@ void InstanceProfileCredentialsProvider::extractCredentials(
             session_token.empty() ? "" : "*****");
 
   last_updated_ = api_.timeSource().systemTime();
-  if (!Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") &&
-      context_) {
+  if (useHttpAsyncClient() && context_) {
     setCredentialsToAllThreads(
         std::make_unique<Credentials>(access_key_id, secret_access_key, session_token));
   } else {
@@ -501,9 +496,7 @@ void TaskRoleCredentialsProvider::refresh() {
   message.headers().setHost(host);
   message.headers().setPath(path);
   message.headers().setCopy(Http::CustomHeaders::get().Authorization, authorization_token_);
-  if (Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") ||
-      !context_) {
+  if (!useHttpAsyncClient() || !context_) {
     // Using curl to fetch the AWS credentials.
     const auto credential_document = fetch_metadata_using_curl_(message);
     if (!credential_document) {
@@ -562,9 +555,7 @@ void TaskRoleCredentialsProvider::extractCredentials(
   }
 
   last_updated_ = api_.timeSource().systemTime();
-  if (!Runtime::runtimeFeatureEnabled(
-          "envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials") &&
-      context_) {
+  if (useHttpAsyncClient() && context_) {
     setCredentialsToAllThreads(
         std::make_unique<Credentials>(access_key_id, secret_access_key, session_token));
   } else {

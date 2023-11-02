@@ -473,7 +473,7 @@ public:
         }));
   }
 
-  TestScopedRuntime scoped_runtime;
+  TestScopedRuntime scoped_runtime_;
   Event::SimulatedTimeSystem time_system_;
   Api::ApiPtr api_;
   NiceMock<MockFetchMetadata> fetch_metadata_;
@@ -1130,7 +1130,7 @@ public:
       : api_(Api::createApiForTest(time_system_)) {}
 
   void setupProvider() {
-    scoped_runtime.mergeValues(
+    scoped_runtime_.mergeValues(
         {{"envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials", "true"}});
     provider_ = std::make_shared<InstanceProfileCredentialsProvider>(
         *api_, absl::nullopt,
@@ -1185,7 +1185,7 @@ public:
     EXPECT_CALL(fetch_metadata_, fetch(messageMatches(headers))).WillOnce(Return(document));
   }
 
-  TestScopedRuntime scoped_runtime;
+  TestScopedRuntime scoped_runtime_;
   Event::SimulatedTimeSystem time_system_;
   Api::ApiPtr api_;
   NiceMock<MockFetchMetadata> fetch_metadata_;
@@ -1502,7 +1502,7 @@ public:
         }));
   }
 
-  TestScopedRuntime scoped_runtime;
+  TestScopedRuntime scoped_runtime_;
   Event::SimulatedTimeSystem time_system_;
   Api::ApiPtr api_;
   NiceMock<MockFetchMetadata> fetch_metadata_;
@@ -1841,7 +1841,7 @@ public:
   }
 
   void setupProvider() {
-    scoped_runtime.mergeValues(
+    scoped_runtime_.mergeValues(
         {{"envoy.reloadable_features.use_libcurl_to_fetch_aws_credentials", "true"}});
     provider_ = std::make_shared<TaskRoleCredentialsProvider>(
         *api_, absl::nullopt,
@@ -1860,7 +1860,7 @@ public:
     EXPECT_CALL(fetch_metadata_, fetch(messageMatches(headers))).WillOnce(Return(document));
   }
 
-  TestScopedRuntime scoped_runtime;
+  TestScopedRuntime scoped_runtime_;
   Event::SimulatedTimeSystem time_system_;
   Api::ApiPtr api_;
   NiceMock<MockFetchMetadata> fetch_metadata_;
@@ -2723,6 +2723,7 @@ public:
                 (const));
   };
 
+  TestScopedRuntime scoped_runtime_;
   Event::SimulatedTimeSystem time_system_;
   Api::ApiPtr api_;
   NiceMock<Upstream::MockClusterManager> cluster_manager_;
@@ -2738,8 +2739,7 @@ TEST_F(DefaultCredentialsProviderChainTest, NoEnvironmentVars) {
 }
 
 TEST_F(DefaultCredentialsProviderChainTest, CredentialsFileDisabled) {
-  TestScopedRuntime scoped_runtime;
-  scoped_runtime.mergeValues({{"envoy.reloadable_features.enable_aws_credentials_file", "false"}});
+  scoped_runtime_.mergeValues({{"envoy.reloadable_features.enable_aws_credentials_file", "false"}});
   EXPECT_CALL(factories_, createCredentialsFileCredentialsProvider(Ref(*api_))).Times(0);
   EXPECT_CALL(factories_, createInstanceProfileCredentialsProvider(Ref(*api_), _, _, _, _));
   DefaultCredentialsProviderChain chain(*api_, context_, "region", DummyFetchMetadata(),
